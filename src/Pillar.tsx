@@ -22,13 +22,29 @@ function DirectionArrow({ direction, color }: {
   // Calculate rotation to point in the direction
   const angle = Math.atan2(direction[2], direction[0])
   
+  // Clone the scene and replace materials to match coin color exactly
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone()
+    const arrowMaterial = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.3, // Same as coin material
+      metalness: 0.0  // Same as coin material
+    })
+    
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.material = arrowMaterial
+      }
+    })
+    return clone
+  }, [scene, color])
+  
   return (
     <primitive
-      object={scene.clone()}
+      object={clonedScene}
       position={[0, arrowHeight, 0]}
       scale={[arrowScale, arrowScale, arrowScale]}
       rotation={[0, angle, 0]}
-      material-color={color}
     />
   )
 }
