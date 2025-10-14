@@ -1,12 +1,36 @@
 import React, { useRef, useState, useMemo } from 'react'
 import * as THREE from 'three'
 import { useStore } from './store'
-import { useCursor } from '@react-three/drei'
+import { useCursor, useGLTF } from '@react-three/drei'
 
 type Props = {
   position: [number, number, number]
   height: number
   radius: number
+}
+
+// Arrow component using the external GLTF model
+function DirectionArrow({ direction, color }: {
+  direction: [number, number, number]
+  color: THREE.Color
+}) {
+  const { scene } = useGLTF('/models/scene.gltf')
+  
+  const arrowScale = 0.3 // Scale down the arrow to fit nicely on the segment
+  const arrowHeight = 0.15 // Position above the segment
+  
+  // Calculate rotation to point in the direction
+  const angle = Math.atan2(direction[2], direction[0])
+  
+  return (
+    <primitive
+      object={scene.clone()}
+      position={[0, arrowHeight, 0]}
+      scale={[arrowScale, arrowScale, arrowScale]}
+      rotation={[0, angle, 0]}
+      material-color={color}
+    />
+  )
 }
 
 // Simple hexagon segment component - no internal state
@@ -89,17 +113,19 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick }: {
   }
 
   return (
-    <mesh
-      castShadow
-      receiveShadow
-      geometry={geom}
-      material={mat}
-      position={position}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-      onPointerDown={onPointerDown}
-      onClick={onClick}
-    />
+    <group position={position}>
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={geom}
+        material={mat}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+        onPointerDown={onPointerDown}
+        onClick={onClick}
+      />
+      <DirectionArrow direction={direction} color={color} />
+    </group>
   )
 }
 
@@ -107,7 +133,7 @@ export function Pillar({ position, height, radius }: Props) {
   const setFocus = useStore(s => s.setCameraRigTarget)
   const [remainingCount, setRemainingCount] = useState(height) // height is now the number of segments
 
-  const segmentHeight = 0.1
+  const segmentHeight = 0.2
   
   // Create a unique identifier for this pillar based on position
   const pillarId = `${position[0]}-${position[2]}`
