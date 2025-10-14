@@ -34,7 +34,13 @@ export function HexGrid({ rows, cols, radius, spacingScale = 1.0 }: Props) {
   return (
     <group>
       {pillars.map(p => (
-        <Pillar key={p.key} position={p.pos} height={p.height} radius={radius} />
+        <Pillar 
+          key={p.key} 
+          position={p.pos} 
+          height={p.height} 
+          radius={radius}
+          allPillars={pillars}
+        />
       ))}
     </group>
   )
