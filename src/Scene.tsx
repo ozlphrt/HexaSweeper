@@ -1,276 +1,93 @@
 import React from 'react'
 import { useThree } from '@react-three/fiber'
 import { HexGrid } from './HexGrid'
-import { TestCoin } from './TestCoin'
-import { Confetti } from './Confetti'
 import { useStore } from './store'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { useGLTF } from '@react-three/drei'
 
-// Arrow component using the external GLTF model (copied from Pillar.tsx)
-function DirectionArrow({ direction, color }: {
-  direction: [number, number, number]
-  color: THREE.Color
-}) {
-  const { scene } = useGLTF('/models/scene.gltf')
+export default function Scene() {
+  const { camera } = useThree()
+  const { 
+    cameraRigTarget, 
+    sunlight, 
+    ambientLight, 
+    setCameraTarget 
+  } = useStore()
   
-  const arrowScale = 0.3 // Scale down the arrow to fit nicely on the segment
-  const arrowHeight = 0.1 // Position just touching the segment (half of segmentHeight)
+  // Auto-focus camera on the hexgrid
+  React.useEffect(() => {
+    if (!cameraRigTarget) {
+      // Position camera to view the entire 30x30 hexgrid
+      const distance = 25 // Adjust for 30x30 grid
+      camera.position.set(distance * 0.7, distance * 0.8, distance * 0.7)
+      camera.lookAt(0, 0, 0)
+    }
+  }, [camera, cameraRigTarget])
   
-  // Calculate rotation to point in the direction
-  // For hexagonal grid: direction[0] = q (horizontal), direction[1] = r (vertical)
-  // Convert axial coordinates to world direction vector
-  const worldX = direction[0] + direction[1] * 0.5
-  const worldZ = direction[1] * Math.sqrt(3) / 2
-  let angle = Math.atan2(worldZ, worldX)
-  
-  // Adjust arrows to point correctly
-  const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
-  if (directionKey === '-1,1,0') {
-    angle += Math.PI * 2 / 3 // Green: Add 120 degrees (2 * 60°) to the right
-  } else if (directionKey === '0,1,0') {
-    angle -= Math.PI * 2 / 3 // Yellow: Subtract 120 degrees (2 * 60°) to the left
-  } else if (directionKey === '0,-1,0') {
-    angle -= Math.PI * 2 / 3 // Cyan: Subtract 120 degrees (2 * 60°) to the left
-  } else if (directionKey === '1,-1,0') {
-    angle += Math.PI * 2 / 3 // Magenta: Add 120 degrees (2 * 60°) to the right
-  }
-  
-  // Clone the scene and replace materials to match coin color exactly
-  const clonedScene = React.useMemo(() => {
-    const clone = scene.clone()
-    const arrowMaterial = new THREE.MeshStandardMaterial({
-      color: color,
-      roughness: 0.3, // Same as coin material
-      metalness: 0.0  // Same as coin material
-    })
-    
-    // Replace all materials in the cloned scene
-    clone.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.material = arrowMaterial
-      }
-    })
-    
-    return clone
-  }, [scene, color])
-  
-  return (
-    <group position={[0, arrowHeight, 0]} rotation={[0, angle, 0]} scale={[arrowScale, arrowScale, arrowScale]}>
-      <primitive object={clonedScene} />
-    </group>
-  )
-}
-
-interface SceneProps {
-  calibrationMode?: boolean
-  testCoin?: {
-    position: [number, number, number]
-    direction: [number, number, number]
-    isFlipping: boolean
-    onFlipComplete?: () => void
-  }
-}
-
-export default function Scene({ calibrationMode = false, testCoin }: SceneProps) {
-  const sunlight = useStore(s => s.sunlight)
-  const ambientLight = useStore(s => s.ambientLight)
-  const focus = useStore(s => s.cameraRigTarget)
-  const confettiEvents = useStore(s => s.confettiEvents)
-  const removeConfetti = useStore(s => s.removeConfetti)
-
-  const dirLight = React.useRef<THREE.DirectionalLight>(null!)
-  const { camera, controls } = useThree()
-
-  // Simple camera rig: smoothly move camera & target toward desired focus
-  useFrame((_, dt) => {
-    if (focus) {
-      const maxDt = Math.min(dt, 0.033)
-      const lerp = 1.0 - Math.pow(0.001, maxDt) // ~exp smoothing
-      const desiredPos = new THREE.Vector3(focus[0] + 6, focus[1] + 6, focus[2] + 8)
-      camera.position.lerp(desiredPos, lerp)
-      // @ts-ignore
-      if (controls) {
-        // @ts-ignore
-        controls.target.lerp(new THREE.Vector3(focus[0], focus[1], focus[2]), lerp)
-        // @ts-ignore
-        controls.update()
-      }
+  // Smooth camera movement to target
+  useFrame((state, delta) => {
+    if (cameraRigTarget) {
+      const targetPosition = new THREE.Vector3(
+        cameraRigTarget[0] + 3,
+        cameraRigTarget[1] + 5,
+        cameraRigTarget[2] + 3
+      )
       
-      // Clear focus after reaching target to stop continuous movement
-      const distance = camera.position.distanceTo(desiredPos)
-      if (distance < 0.1) {
-        useStore.getState().setCameraRigTarget(null)
+      camera.position.lerp(targetPosition, delta * 2)
+      camera.lookAt(cameraRigTarget[0], cameraRigTarget[1], cameraRigTarget[2])
+      
+      // Clear target after reaching it
+      if (camera.position.distanceTo(targetPosition) < 0.1) {
+        setCameraTarget(null)
       }
     }
   })
-
+  
   return (
     <>
       {/* Atmospheric fog */}
-      <fog attach="fog" args={['#2c3e50', 25, 80]} />
+      <fog attach="fog" args={['#2c3e50', 40, 100]} />
       
       {/* Key Light - Main directional light */}
       <directionalLight
-        ref={dirLight}
+        position={[10, 20, 10]}
+        intensity={sunlight}
         castShadow
-        position={[15, 20, 10]}
-        intensity={sunlight * 1.2}
-        shadow-mapSize={[1024, 1024]}
-        shadow-camera-far={100}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-far={50}
         shadow-camera-left={-20}
         shadow-camera-right={20}
         shadow-camera-top={20}
         shadow-camera-bottom={-20}
-        shadow-radius={12}
-        shadow-bias={-0.0001}
-        shadow-normalBias={0.02}
       />
       
-      {/* Fill Light - Soft directional light from opposite side */}
+      {/* Fill Light - Softer ambient light */}
+      <ambientLight intensity={ambientLight} />
+      
+      {/* Rim Light - Subtle backlighting */}
       <directionalLight
-        position={[-10, 15, -8]}
-        intensity={sunlight * 0.8}
-        color="#ffffff"
+        position={[-10, 10, -10]}
+        intensity={0.3}
+        color="#4a90e2"
       />
       
-      {/* Rim Light - Back light for edge definition */}
-      <directionalLight
-        position={[0, 10, -15]}
-        intensity={sunlight * 0.6}
-        color="#ffffff"
-      />
-      
-      {/* Additional fill light from left side */}
-      <directionalLight
-        position={[-15, 12, 5]}
-        intensity={sunlight * 0.5}
-        color="#ffffff"
-      />
-      
-      {/* Soft ambient fill */}
-      <ambientLight intensity={0.25 + ambientLight * 0.2} color="#ffffff" />
-      
-      {/* Casino green base plane that receives shadows */}
+      {/* Green base/ground plane */}
       <mesh 
-        rotation={[-Math.PI / 2, 0, 0]} 
-        position={[0, 0, 0]}
+        position={[0, -0.1, 0]} 
+        rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow
       >
-        <planeGeometry args={[50, 50]} />
+        <planeGeometry args={[100, 100]} />
         <meshStandardMaterial 
-          color="#0F5132" 
+          color="#2d5a2d" 
           roughness={0.8}
           metalness={0.0}
         />
       </mesh>
       
-      {!calibrationMode ? (
-        <HexGrid rows={10} cols={10} radius={1.0} spacingScale={0.85} />
-      ) : (
-        <>
-          {/* Test coin with flipping animation */}
-          {testCoin && (
-            <TestCoin 
-              position={testCoin.position}
-              direction={testCoin.direction}
-              isFlipping={testCoin.isFlipping}
-              onFlipComplete={testCoin.onFlipComplete}
-            />
-          )}
-          
-          {/* Target position indicator */}
-          {testCoin && (
-            <mesh position={[testCoin.position[0] + testCoin.direction[0] * 2, testCoin.position[1], testCoin.position[2] + testCoin.direction[1] * 2]}>
-              <cylinderGeometry args={[0.5, 0.5, 0.2, 6]} />
-              <meshStandardMaterial color="#ff0000" transparent opacity={0.3} />
-            </mesh>
-          )}
-        </>
-      )}
-
-      {/* Confetti Effects */}
-      {confettiEvents.map((event) => (
-        <Confetti
-          key={event.id}
-          position={event.position}
-          isActive={event.isActive}
-          onComplete={() => removeConfetti(event.id)}
-        />
-      ))}
-
-      {/* Empty Pillar Bases around the board - outside edge tiles */}
-      {(() => {
-        const pillarBases = []
-        const radius = 1.0
-        const spacingScale = 0.85
-        const rows = 10
-        const cols = 10
-        
-        // Hexagonal positioning function (same as HexGrid)
-        const hexPosition = (q: number, r: number) => {
-          const size = radius * spacingScale
-          const x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r)
-          const z = size * (3 / 2 * r)
-          return [x, 0, z] as const
-        }
-        
-        const r0 = -Math.floor(rows / 2)
-        const c0 = -Math.floor(cols / 2)
-        
-        // Hexagonal neighbor directions (flat-top hexagons)
-        const hexDirections = [
-          [1, 0],   // East
-          [1, -1],  // Northeast  
-          [0, -1],  // Northwest
-          [-1, 0],  // West
-          [-1, 1],  // Southwest
-          [0, 1]    // Southeast
-        ]
-        
-        // Find edge positions and place empty bases outside them following honeycomb structure
-        for (let q = 0; q < cols; q++) {
-          for (let r = 0; r < rows; r++) {
-            const [x, y, z] = hexPosition(q + c0, r + r0, radius, spacingScale)
-            
-            // Check if this is an edge position
-            const isEdge = q === 0 || q === cols - 1 || r === 0 || r === rows - 1
-            
-            if (isEdge) {
-              // For each edge tile, place empty bases in all 6 hexagonal directions
-              // that would be outside the board
-              hexDirections.forEach(([dq, dr], dirIndex) => {
-                const neighborQ = q + dq
-                const neighborR = r + dr
-                
-                // Check if this neighbor would be outside the board
-                const isOutside = neighborQ < 0 || neighborQ >= cols || neighborR < 0 || neighborR >= rows
-                
-                if (isOutside) {
-                  // Place empty base at this neighbor position
-                  const [neighborX, neighborY, neighborZ] = hexPosition(
-                    neighborQ + c0, 
-                    neighborR + r0, 
-                    radius, 
-                    spacingScale
-                  )
-                  
-                  pillarBases.push(
-                    <mesh key={`edge-${q}-${r}-${dirIndex}`} position={[neighborX, neighborY, neighborZ]}>
-                      <cylinderGeometry args={[1.0, 1.0, 0.1, 6]} />
-                      <meshStandardMaterial color="#1a4d1a" />
-                    </mesh>
-                  )
-                }
-              })
-            }
-          }
-        }
-        
-        return pillarBases
-      })()}
-
+      {/* Hexagonal Grid */}
+      <HexGrid />
     </>
   )
 }

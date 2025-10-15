@@ -1,92 +1,166 @@
-# Hexa Away 3D - Advanced Hexagonal Coin Game
+# Hexagrid Minesweeper - Advanced 3D Hexagonal Minesweeper Game
 
-An advanced 3D hexagonal board game built with React Three Fiber, featuring directional coin movement, physics-based interactions, and strategic gameplay mechanics.
+A modern, immersive 3D implementation of the classic Minesweeper game built with React Three Fiber, featuring hexagonal tiles, realistic physics, dynamic lighting, and engaging sound effects.
 
-## Features
+## 🎮 Game Features
 
-- **Dynamic Hexagonal Grid**: 10×10 grid with randomly placed pillars and gaps
-- **Directional Coin System**: 6 unique movement directions with colored arrows
-- **Physics-Based Movement**: Smooth coin animations with collision detection
-- **Strategic Gameplay**: Move coins to lower pillars or flip them into the void
-- **Camera Focus System**: Automatic camera tracking of coin movements
-- **Performance Monitoring**: Real-time FPS counter and performance metrics
+### Core Gameplay
+- **Classic Minesweeper Rules**: Left-click to reveal cells, right-click to flag mines
+- **Multiple Difficulty Levels**: Beginner (9x9), Intermediate (16x16), Expert (16x30)
+- **Smart Mine Placement**: First click is always safe
+- **Auto-reveal**: Empty cells automatically reveal adjacent safe areas
 
-## Technical Stack
+### 3D Visual Experience
+- **Immersive 3D Environment**: Full 3D minefield with depth and perspective
+- **Dynamic Lighting**: Realistic shadows and lighting effects
+- **Smooth Animations**: Fluid cell reveals, flag placements, and mine explosions
+- **Camera Controls**: Orbit, zoom, and pan for optimal viewing angles
 
-- **React** - UI framework
-- **React Three Fiber** - 3D rendering with Three.js
-- **React Three Drei** - Useful helpers and components
-- **Zustand** - State management
-- **TypeScript** - Type safety
-- **Vite** - Build tool
+### Advanced Features
+- **Timer System**: Track your solving time with precision
+- **Mine Counter**: Real-time display of remaining mines
+- **Game Statistics**: Track wins, losses, and best times
+- **Restart Functionality**: Quick game reset with new mine placement
+- **Sound Effects**: Immersive audio feedback for all interactions
 
-## Getting Started
+## 🎯 Game Mechanics
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+### Cell States
+- **Hidden**: Covered cell with unknown content
+- **Revealed**: Exposed cell showing number or empty space
+- **Flagged**: Marked as potential mine location
+- **Mine**: Explosive cell that ends the game when revealed
 
-2. Start the development server:
-   ```bash
-   npm run dev
-   ```
+### Number System
+- **0-8**: Indicates number of adjacent mines
+- **Empty (0)**: Automatically reveals all adjacent cells
+- **Mine**: Triggers game over with explosion effect
 
-3. Open your browser to `http://localhost:5173`
+### Win/Lose Conditions
+- **Win**: All non-mine cells revealed
+- **Lose**: Mine cell revealed (explosion animation)
 
-## Game Mechanics
+## 🎨 Visual Design
 
-### Coin Movement System
-- Each pillar contains 2-10 hexagonal coins (segments)
-- Coins have directional arrows indicating movement direction
-- **6 Movement Directions**: Red (right), Green (up-left), Yellow (up-right), Blue (left), Cyan (down-left), Magenta (down-right)
-- Click any coin to attempt movement in its direction
+### 3D Environment
+- **Grid Layout**: Clean, organized square grid in 3D space
+- **Cell Design**: Modern, minimalist cell appearance
+- **Color Coding**: Intuitive color scheme for different cell states
+- **Depth Perception**: Clear visual hierarchy with shadows and lighting
 
-### Movement Rules
-- **Valid Move**: Coin can move to a pillar of equal or lower height
-- **Blocked Move**: Coin shakes if target pillar is taller
-- **Void Drop**: Coin flips into void if no target pillar exists (+1 point)
-- **Height Restriction**: Coins can only move to pillars they can "reach"
+### UI Elements
+- **Glassmorphism Design**: Modern, translucent UI components
+- **Real-time Stats**: Live updates for timer and mine counter
+- **Responsive Layout**: Adapts to different screen sizes
+- **Smooth Transitions**: Polished animations throughout
 
-### Physics & Animation
-- **Smooth Transitions**: Linear interpolation for coin movement
-- **Flipping Animation**: 180-degree rotation during movement
-- **Blocked Feedback**: Rapid shaking animation for invalid moves
-- **Gravity Stacking**: Coins stack naturally with slight horizontal randomness
+## 🎵 Audio Experience
 
-## Controls
+### Sound Effects
+- **Cell Click**: Satisfying click feedback for cell interactions
+- **Flag Placement**: Distinct sound for flagging/unflagging
+- **Mine Explosion**: Dramatic explosion sound for game over
+- **Victory**: Celebratory sound for successful completion
+- **Ambient**: Subtle background audio for immersion
 
-- **Mouse**: Left-click and drag to rotate camera
-- **Mouse Wheel**: Zoom in/out
-- **Right-click and drag**: Pan camera
-- **Click Coins**: Interact with individual coins for movement
+## 🛠️ Technical Stack
 
-## Visual Design
+### Core Technologies
+- **React 18**: Modern React with hooks and functional components
+- **TypeScript**: Full type safety and enhanced development experience
+- **React Three Fiber**: React renderer for Three.js
+- **Three.js**: 3D graphics library for WebGL rendering
+- **Zustand**: Lightweight state management
 
-- **Background**: Dark navy blue (`#2c3e50`) with atmospheric fog
-- **Base**: Casino green plane (`#0F5132`) for contrast
-- **Coins**: Creamy white hexagonal segments with subtle variations
-- **Arrows**: Colored directional indicators (red, green, yellow, blue, cyan, magenta)
-- **Lighting**: Multi-directional studio lighting with soft shadows
+### 3D Graphics
+- **@react-three/drei**: Useful helpers and components for R3F
+- **WebGL**: Hardware-accelerated 3D rendering
+- **GLTF Models**: 3D assets for enhanced visual experience
 
-## Scoring System
+### Development Tools
+- **Vite**: Fast build tool and development server
+- **GitHub Pages**: Automated deployment and hosting
+- **ESLint**: Code quality and consistency
 
-- **Void Drops**: +1 point per coin successfully flipped into void
-- **Strategic Moves**: Bonus points for complex multi-step movements
-- **Height Management**: Points for maintaining optimal pillar heights
+## 🚀 Getting Started
 
-## Development
+### Prerequisites
+- Node.js 16+ and npm
+- Modern web browser with WebGL support
 
-The project structure:
-- `src/App.tsx` - Main application component with canvas setup
-- `src/Scene.tsx` - 3D scene, lighting, and camera focus system
-- `src/HexGrid.tsx` - Hexagonal grid generation with random gaps
-- `src/Pillar.tsx` - Individual pillar with coin management and physics
-- `src/store.ts` - Global state management for game state
-- `src/FpsCounter.tsx` - Performance monitoring component
+### Installation
+```bash
+# Clone the repository
+git clone https://github.com/ozlphrt/minesweeper-3d.git
+cd minesweeper-3d
 
-## Live Demo
+# Install dependencies
+npm install
 
-🌐 **Play Online**: [https://ozlphrt.github.io/Hexa-away-3D](https://ozlphrt.github.io/Hexa-away-3D)
+# Start development server
+npm run dev
+```
 
-Built as an advanced proof-of-concept for strategic hexagonal board games with sophisticated 3D interactions and physics-based gameplay.
+### Building for Production
+```bash
+# Build the project
+npm run build
+
+# Preview production build
+npm run preview
+
+# Deploy to GitHub Pages
+npm run deploy
+```
+
+## 🎮 How to Play
+
+1. **Start the Game**: Choose your difficulty level
+2. **Reveal Cells**: Left-click on cells to reveal their content
+3. **Flag Mines**: Right-click to flag suspected mine locations
+4. **Use Numbers**: Numbers indicate adjacent mine count
+5. **Win**: Reveal all non-mine cells to win
+6. **Avoid Mines**: Don't click on mine cells or you'll lose!
+
+## 🌐 Live Demo
+
+Play the game online: [Minesweeper 3D](https://ozlphrt.github.io/minesweeper-3d)
+
+## 📁 Project Structure
+
+```
+src/
+├── App.tsx              # Main application component
+├── Scene.tsx            # 3D scene setup and lighting
+├── MineField.tsx        # Game board and grid management
+├── Cell.tsx             # Individual mine cell component
+├── GameUI.tsx           # User interface and controls
+├── store.ts             # Game state management
+├── SoundManager.ts      # Audio system
+└── styles.css           # Global styles and UI components
+```
+
+## 🔧 Development
+
+### Key Components
+- **MineField**: Manages the game grid and mine placement
+- **Cell**: Handles individual cell interactions and rendering
+- **GameUI**: Provides game controls and statistics display
+- **SoundManager**: Manages all audio feedback
+
+### State Management
+- Game board state (mine positions, revealed cells, flags)
+- Game statistics (time, mine count, win/loss tracking)
+- UI state (difficulty selection, game status)
+
+## 📝 License
+
+This project is open source and available under the MIT License.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
+
+---
+
+**Enjoy playing Minesweeper 3D!** 🎮💣

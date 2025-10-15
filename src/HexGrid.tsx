@@ -1,107 +1,71 @@
-import React, { useMemo } from 'react'
+import React, { useEffect } from 'react'
 import { Pillar } from './Pillar'
+import { useStore } from './store'
 
-type Props = {
-  rows: number
-  cols: number
-  radius: number
-  spacingScale?: number
-}
-
-// Proper hexagonal grid positioning for flat-top hexagons
-function hexPosition(q: number, r: number, radius: number, scale: number) {
-  const size = radius * scale
-  const x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r)
-  const z = size * (3 / 2 * r)
-  return [x, 0, z] as const
-}
-
-export function HexGrid({ rows, cols, radius, spacingScale = 1.0 }: Props) {
-  const pillars = useMemo(() => {
-    const arr: { key: string, pos: [number, number, number], height: number }[] = []
-    const r0 = -Math.floor(rows / 2)
-    const c0 = -Math.floor(cols / 2)
+export function HexGrid() {
+  const { pillarConfigs, initializeGame } = useStore()
+  
+  const radius = 0.8
+  const spacingScale = 0.85
+  const rows = 50  // 50x50 grid for better circular coverage
+  const cols = 50
+  
+  // Hexagonal positioning function
+  const hexPosition = (q: number, r: number) => {
+    const size = radius * spacingScale
+    const x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r)
+    const z = size * (3 / 2 * r)
+    return [x, 0, z] as const
+  }
+  
+  // Initialize game with mines when component mounts
+  useEffect(() => {
+    const r0 = -Math.floor(rows / 2)  // -25
+    const c0 = -Math.floor(cols / 2)  // -25
+    const maxDistance = 18  // Circular boundary radius
     
-    // Add regular board pillars
+    // Generate grid configuration
+    const arr: { key: string, pos: [number, number, number], height: number }[] = []
+    
+    // Create the 50x50 hexagonal grid with circular boundary
     for (let q = 0; q < cols; q++) {
       for (let r = 0; r < rows; r++) {
         const [x, y, z] = hexPosition(q + c0, r + r0, radius, spacingScale)
         
-        // Create gaps in the grid - some positions are empty (height 0)
-        const shouldSkip = Math.random() < 0.2 // 20% chance of gap
-        const segmentCount = shouldSkip ? 0 : Math.floor(1 + Math.random() * 3) // Random 1-3 segments, or 0 for gaps
+        // Check if tile is within circular boundary
+        const distanceFromCenter = Math.sqrt(x * x + z * z)
+        if (distanceFromCenter > maxDistance) {
+          continue  // Skip tiles outside the circular boundary
+        }
         
-        arr.push({ key: `p-${q}-${r}`, pos: [x, y, z], height: segmentCount })
+        // 15% chance of creating a gap (no tile)
+        if (Math.random() < 0.15) {
+          continue
+        }
+        
+        // Create empty pillars (height 0) for Minesweeper
+        arr.push({ key: `p-${q}-${r}`, pos: [x, y, z], height: 0 })
       }
     }
     
-        // Add green hexagon pillars (empty pillars outside the board)
-        // Hexagonal neighbor directions (flat-top hexagons)
-        const hexDirections = [
-          [1, 0],   // East
-          [1, -1],  // Northeast  
-          [0, -1],  // Northwest
-          [-1, 0],  // West
-          [-1, 1],  // Southwest
-          [0, 1]    // Southeast
-        ]
-        
-        // Use a Set to track unique green hexagon positions
-        const greenHexagonPositions = new Set<string>()
-        
-        // Find edge positions and place green hexagons outside them
-        for (let q = 0; q < cols; q++) {
-          for (let r = 0; r < rows; r++) {
-            const isEdge = q === 0 || q === cols - 1 || r === 0 || r === rows - 1
-            
-            if (isEdge) {
-              // For each edge tile, place green hexagons in all 6 hexagonal directions
-              // that would be outside the board
-              hexDirections.forEach(([dq, dr], dirIndex) => {
-                const neighborQ = q + dq
-                const neighborR = r + dr
-                
-                // Check if this neighbor would be outside the board
-                const isOutside = neighborQ < 0 || neighborQ >= cols || neighborR < 0 || neighborR >= rows
-                
-                if (isOutside) {
-                  // Place green hexagon at this neighbor position
-                  const [x, y, z] = hexPosition(
-                    neighborQ + c0, 
-                    neighborR + r0, 
-                    radius, 
-                    spacingScale
-                  )
-                  
-                  // Create a unique key for the green hexagon using axial coordinates
-                  const greenPillarId = `green-${neighborQ}-${neighborR}`
-                  
-                  // Only add if we haven't seen this position before
-                  if (!greenHexagonPositions.has(greenPillarId)) {
-                    greenHexagonPositions.add(greenPillarId)
-                    arr.push({ key: greenPillarId, pos: [x, y, z], height: 0 })
-                  }
-                }
-              })
-            }
-          }
-        }
-    
-    return arr
-  }, [rows, cols, radius, spacingScale])
-
+    if (arr.length > 0) {
+      const mineCount = Math.floor(arr.length * 0.15) // 15% of cells are mines
+      initializeGame(arr, mineCount)
+    }
+  }, []) // Empty dependency array to run only once
+  
   return (
-    <group>
-      {pillars.map(p => (
-        <Pillar 
-          key={p.key} 
-          position={p.pos} 
-          height={p.height} 
+    <>
+      {pillarConfigs.map(({ key, pos, height }) => (
+        <Pillar
+          key={key}
+          position={pos}
+          height={height}
           radius={radius}
-          allPillars={pillars}
-          pillarKey={p.key}
+          allPillars={pillarConfigs}
+          pillarKey={key}
         />
       ))}
-    </group>
+    </>
   )
 }

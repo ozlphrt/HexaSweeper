@@ -1,6 +1,7 @@
 {
-  "name": "hexa-away-3d-poc",
-  "version": "1.0.1",
+  "name": "hexagrid-minesweeper",
+  "version": "1.0.0",
+  "description": "Hexagrid Minesweeper - A 3D hexagonal Minesweeper game built with React Three Fiber",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +11,7 @@
     "deploy": "gh-pages -d dist",
     "predeploy": "npm run build"
   },
-  "homepage": "https://ozlphrt.github.io/Hexa-away-3D",
+  "homepage": "https://ozlphrt.github.io/hexagrid-minesweeper",
   "dependencies": {
     "@react-three/drei": "^9.88.13",
     "@react-three/fiber": "^8.15.12",
