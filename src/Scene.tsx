@@ -6,6 +6,62 @@ import { Confetti } from './Confetti'
 import { useStore } from './store'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { useGLTF } from '@react-three/drei'
+
+// Arrow component using the external GLTF model (copied from Pillar.tsx)
+function DirectionArrow({ direction, color }: {
+  direction: [number, number, number]
+  color: THREE.Color
+}) {
+  const { scene } = useGLTF('/models/scene.gltf')
+  
+  const arrowScale = 0.3 // Scale down the arrow to fit nicely on the segment
+  const arrowHeight = 0.1 // Position just touching the segment (half of segmentHeight)
+  
+  // Calculate rotation to point in the direction
+  // For hexagonal grid: direction[0] = q (horizontal), direction[1] = r (vertical)
+  // Convert axial coordinates to world direction vector
+  const worldX = direction[0] + direction[1] * 0.5
+  const worldZ = direction[1] * Math.sqrt(3) / 2
+  let angle = Math.atan2(worldZ, worldX)
+  
+  // Adjust arrows to point correctly
+  const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
+  if (directionKey === '-1,1,0') {
+    angle += Math.PI * 2 / 3 // Green: Add 120 degrees (2 * 60°) to the right
+  } else if (directionKey === '0,1,0') {
+    angle -= Math.PI * 2 / 3 // Yellow: Subtract 120 degrees (2 * 60°) to the left
+  } else if (directionKey === '0,-1,0') {
+    angle -= Math.PI * 2 / 3 // Cyan: Subtract 120 degrees (2 * 60°) to the left
+  } else if (directionKey === '1,-1,0') {
+    angle += Math.PI * 2 / 3 // Magenta: Add 120 degrees (2 * 60°) to the right
+  }
+  
+  // Clone the scene and replace materials to match coin color exactly
+  const clonedScene = React.useMemo(() => {
+    const clone = scene.clone()
+    const arrowMaterial = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.3, // Same as coin material
+      metalness: 0.0  // Same as coin material
+    })
+    
+    // Replace all materials in the cloned scene
+    clone.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material = arrowMaterial
+      }
+    })
+    
+    return clone
+  }, [scene, color])
+  
+  return (
+    <group position={[0, arrowHeight, 0]} rotation={[0, angle, 0]} scale={[arrowScale, arrowScale, arrowScale]}>
+      <primitive object={clonedScene} />
+    </group>
+  )
+}
 
 interface SceneProps {
   calibrationMode?: boolean
@@ -214,6 +270,7 @@ export default function Scene({ calibrationMode = false, testCoin }: SceneProps)
         
         return pillarBases
       })()}
+
     </>
   )
 }

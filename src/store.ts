@@ -137,6 +137,7 @@ export const useStore = create<State>((set, get) => ({
     confettiEvents: state.confettiEvents.filter(event => event.id !== id)
   })),
 
+
   resetScene: () => {
     // Soft reset: just clear camera focus; user can refresh to fully reset bodies
     set({ 

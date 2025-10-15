@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react'
+import React, { useRef, useState, useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useStore } from './store'
@@ -10,6 +10,7 @@ type Props = {
   height: number
   radius: number
   allPillars: { key: string, pos: [number, number, number], height: number }[]
+  pillarKey: string
 }
 
 // Arrow component using the external GLTF model
@@ -71,7 +72,7 @@ function DirectionArrow({ direction, color }: {
 }
 
 // Simple hexagon segment component - no internal state
-function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIndex, direction, targetPosition, onAnimationComplete, isBlocked }: {
+function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIndex, direction, targetPosition, onAnimationComplete, isBlocked, pillarId }: {
   position: [number, number, number]
   radius: number
   segmentHeight: number
@@ -81,6 +82,7 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
   targetPosition?: [number, number, number]
   onAnimationComplete?: (finalPosition: [number, number, number]) => void
   isBlocked?: boolean
+  pillarId: string
 }) {
   const [hovered, setHovered] = useState(false)
   const [isMoving, setIsMoving] = useState(false)
@@ -93,13 +95,20 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
   const meshRef = useRef<THREE.Mesh>(null)
   useCursor(hovered)
 
+  // Handle animation completion in useEffect to avoid setState during render
+  useEffect(() => {
+    if (!isMoving && !isFlipping && animationProgress === 0 && onAnimationComplete && targetPosition) {
+      onAnimationComplete(targetPosition)
+    }
+  }, [isMoving, isFlipping, animationProgress, onAnimationComplete, targetPosition])
+
   // Enhanced physics animation with momentum and bounce
   useFrame((state, delta) => {
     // Start flipping immediately when clicked, before movement
     if (isFlipping && meshRef.current) {
       setAnimationProgress(prev => {
         // Different duration for blocked vs normal animations - slower for more visible physics
-        const animationSpeed = isBlocked ? 4 : 2 // Slower speeds for more dramatic effect
+        const animationSpeed = isBlocked ? 15 : 12 // Maximum speed for instant chaining
         const newProgress = prev + delta * animationSpeed
         
         // Add momentum curve for more realistic movement
@@ -114,10 +123,6 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
           setIsFlipping(false)
           setAnimationProgress(0)
           setSpinRotation(0)
-          // Call completion callback with final position
-          if (onAnimationComplete && targetPosition) {
-            onAnimationComplete(targetPosition)
-          }
           return 0
         }
         return newProgress
@@ -151,7 +156,7 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
         }
         
         // Spin around the Z-axis with the arrow direction as the rotation axis - more dramatic
-        setSpinRotation(prev => prev + delta * 25) // Faster spin for more visible effect
+        setSpinRotation(prev => prev + delta * 80) // Maximum speed spin for instant chaining
         
         // Store the arrow angle for use in rotation
         setArrowAngle(arrowAngle)
@@ -256,6 +261,40 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
     }
   }
 
+  // Listen for animation trigger events from chain movements
+  React.useEffect(() => {
+    const handleTriggerAnimation = (event: CustomEvent) => {
+      const { pillarId: targetPillarId, segmentIndex: targetSegmentIndex } = event.detail
+      
+      console.log(`HexSegment ${segmentIndex} received trigger event for pillar ${targetPillarId}, segment ${targetSegmentIndex}`)
+      console.log(`Current segment pillarId: ${pillarId}, position: [${position.join(',')}]`)
+      
+      // Check if this segment should be triggered
+      if (targetPillarId === pillarId && targetSegmentIndex === segmentIndex) {
+        console.log(`MATCH! Triggering animation for segment ${segmentIndex} via event`)
+        if (!isMoving && !isFlipping) {
+          // Play coin flip sound
+          soundManager.playCoinFlip()
+          
+          // Start flipping immediately
+          setIsFlipping(true)
+          setStartPosition(position)
+          setIsMoving(true)
+          onSegmentClick()
+        } else {
+          console.log(`Segment ${segmentIndex} is already animating, skipping`)
+        }
+      } else {
+        console.log(`No match for segment ${segmentIndex}`)
+      }
+    }
+
+    window.addEventListener('triggerSegmentAnimation', handleTriggerAnimation as EventListener)
+    return () => {
+      window.removeEventListener('triggerSegmentAnimation', handleTriggerAnimation as EventListener)
+    }
+  }, [position, segmentIndex, isMoving, isFlipping, onSegmentClick])
+
   // Calculate current position during animation with enhanced physics
   const currentPosition = useMemo(() => {
     if (!isMoving || !targetPosition) return position
@@ -335,12 +374,13 @@ function distance(p1: [number, number, number], p2: [number, number, number]): n
   return Math.sqrt(dx * dx + dz * dz)
 }
 
-// Helper function to check if two positions are the same (within tolerance)
+  // Helper function to check if two positions are the same (within tolerance)
 function positionsEqual(p1: [number, number, number], p2: [number, number, number], tolerance: number = 0.01): boolean {
   return distance(p1, p2) < tolerance
 }
 
-export function Pillar({ position, height, radius, allPillars }: Props) {
+
+export function Pillar({ position, height, radius, allPillars, pillarKey }: Props) {
   const setFocus = useStore(s => s.setCameraRigTarget)
   const setPillarHeight = useStore(s => s.setPillarHeight)
   const getPillarHeight = useStore(s => s.getPillarHeight)
@@ -354,6 +394,74 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
   const [animatingSegments, setAnimatingSegments] = useState<Set<number>>(new Set()) // Track which segments are currently animating
 
   const segmentHeight = 0.2
+  const pillarId = `${position[0]}-${position[2]}`
+
+  // Function to check if a coin can continue moving in the same direction from its NEW location
+  const checkAndContinueMove = (newPillarId: string, newSegmentIndex: number, direction: [number, number, number]) => {
+    // Find the NEW pillar where the coin just landed
+    const newPillar = allPillars.find(p => `${p.pos[0]}-${p.pos[2]}` === newPillarId)
+    if (!newPillar) return
+    
+    // Check if this is a green hexagon (coins in green hexagons cannot move)
+    const isGreenHexagon = !newPillar.key.startsWith('p-')
+    if (isGreenHexagon) {
+      console.log(`Coin in green hexagon ${newPillarId} cannot continue moving`)
+      return
+    }
+    
+    // Find the next pillar in the same direction from the NEW location
+    const nextPillar = findNextPillar(newPillar.pos, direction, 1.0, 0.85)
+    if (!nextPillar) {
+      console.log(`No next pillar found for ${newPillarId} in direction [${direction.join(',')}]`)
+      return
+    }
+    
+    // Check height constraint from the NEW location
+    const targetPillarId = `${nextPillar.pos[0]}-${nextPillar.pos[2]}`
+    const targetPillarHeight = getPillarHeight(targetPillarId) || nextPillar.height
+    const currentSegmentHeight = newSegmentIndex + 1
+    
+    const isTargetGreenHexagon = !nextPillar.key.startsWith('p-')
+    if (!isTargetGreenHexagon && targetPillarHeight > currentSegmentHeight) {
+      console.log(`Cannot continue move - target pillar is taller (${targetPillarHeight} > ${currentSegmentHeight})`)
+      return
+    }
+    
+    // If we can move, trigger the move from the NEW location
+    console.log(`Continuing move from NEW location ${newPillarId} to ${targetPillarId}`)
+    
+    // Trigger the move from the NEW pillar
+    const continueMoveEvent = new CustomEvent('continueMove', {
+      detail: {
+        pillarId: newPillarId,
+        segmentIndex: newSegmentIndex,
+        direction: direction
+      }
+    })
+    window.dispatchEvent(continueMoveEvent)
+  }
+
+  // Listen for continue move events
+  React.useEffect(() => {
+    const handleContinueMove = (event: CustomEvent) => {
+      const { pillarId: targetPillarId, segmentIndex, direction } = event.detail
+      
+      // Check if this pillar is the target
+      if (pillarId === targetPillarId) {
+        console.log(`Received continue move event for pillar ${pillarId}, segment ${segmentIndex}`)
+        console.log(`About to call handleSegmentClick with segmentIndex: ${segmentIndex}, direction: [${direction.join(',')}]`)
+        
+        // Call handleSegmentClick which will trigger the animation
+        handleSegmentClick(segmentIndex, direction, true)
+      }
+    }
+
+    window.addEventListener('continueMove', handleContinueMove as EventListener)
+    return () => {
+      window.removeEventListener('continueMove', handleContinueMove as EventListener)
+    }
+  }, [pillarId])
+
 
   // Function to find the nearest stacking area based on direction
   const findNearestStackingArea = (direction: [number, number, number]): [number, number, number] => {
@@ -391,7 +499,6 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
   }
   
   // Create a unique identifier for this pillar based on position
-  const pillarId = `${position[0]}-${position[2]}`
   
   // Generate random direction for each segment
   const segmentDirections = useMemo(() => {
@@ -415,10 +522,10 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
   React.useEffect(() => {
     if (!pillarConfigs.has(pillarId)) {
       setPillarHeight(pillarId, height)
-      // Initialize directions for all segments
+      // Initialize directions for all segments with random assignment
       for (let i = 0; i < height; i++) {
-        const direction = segmentDirections[i % segmentDirections.length]
-        setCoinDirection(pillarId, i, direction)
+        const randomDirection = segmentDirections[Math.floor(Math.random() * segmentDirections.length)]
+        setCoinDirection(pillarId, i, randomDirection)
       }
     }
   }, [pillarId, setPillarHeight, pillarConfigs, setCoinDirection, segmentDirections])
@@ -431,6 +538,8 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     // Convert current world position back to axial coordinates
     const currentAxial = worldToAxial(currentPos[0], currentPos[2])
     console.log(`Current axial position: [${currentAxial.q}, ${currentAxial.r}]`)
+    console.log(`Current world position: [${currentPos[0]}, ${currentPos[2]}]`)
+    console.log(`Direction: [${direction[0]}, ${direction[1]}, ${direction[2]}]`)
     
     // Calculate target axial position
     const targetAxial = {
@@ -438,17 +547,72 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
       r: currentAxial.r + direction[1]
     }
     console.log(`Target axial position: [${targetAxial.q}, ${targetAxial.r}]`)
+    console.log(`Target world position should be: [${currentPos[0] + direction[0] * 1.7}, ${currentPos[2] + direction[1] * 1.7}]`)
+    console.log(`DEBUG: currentAxial calculation: q=${currentAxial.q}, r=${currentAxial.r}`)
+    console.log(`DEBUG: direction addition: q=${currentAxial.q} + ${direction[0]} = ${targetAxial.q}, r=${currentAxial.r} + ${direction[1]} = ${targetAxial.r}`)
     
-    // Find the pillar at the target axial position
+    // Find the pillar at the target axial position (including gaps with height 0)
     for (const pillar of allPillars) {
       const pillarAxial = worldToAxial(pillar.pos[0], pillar.pos[2])
-      if (pillarAxial.q === targetAxial.q && pillarAxial.r === targetAxial.r) {
-        console.log(`Found target pillar: ${pillar.key} at axial [${pillarAxial.q}, ${pillarAxial.r}]`)
+      console.log(`Checking pillar ${pillar.key} at world [${pillar.pos[0]}, ${pillar.pos[2]}] -> axial [${pillarAxial.q}, ${pillarAxial.r}] vs target [${targetAxial.q}, ${targetAxial.r}]`)
+      
+      // Use tolerance for coordinate matching to handle floating point precision issues
+      const qMatch = Math.abs(pillarAxial.q - targetAxial.q) < 0.1
+      const rMatch = Math.abs(pillarAxial.r - targetAxial.r) < 0.1
+      
+      if (qMatch && rMatch) {
+        console.log(`Found target pillar: ${pillar.key} at axial [${pillarAxial.q}, ${pillarAxial.r}] with height ${pillar.height}`)
         return pillar
       }
     }
     
-    console.log(`No pillar found at target axial position [${targetAxial.q}, ${targetAxial.r}]`)
+    console.log(`No pillar found at target axial position [${targetAxial.q}, ${targetAxial.r}] - this might be a gap or outside board`)
+    
+    // Check if target position is within board bounds (gap) or outside (green hexagon)
+    const rows = 10
+    const cols = 10
+    const r0 = -Math.floor(rows / 2)  // -5
+    const c0 = -Math.floor(cols / 2)  // -5
+    
+    console.log(`Board bounds: rows=${rows}, cols=${cols}, r0=${r0}, c0=${c0}`)
+    console.log(`Target axial: [${targetAxial.q}, ${targetAxial.r}]`)
+    
+    const isWithinBoard = targetAxial.q >= c0 && targetAxial.q < c0 + cols && 
+                         targetAxial.r >= r0 && targetAxial.r < r0 + rows
+    const isOutside = targetAxial.q < c0 || targetAxial.q >= c0 + cols || 
+                     targetAxial.r < r0 || targetAxial.r >= r0 + rows
+    
+    if (isWithinBoard) {
+      // This is a gap within the board - create a virtual gap pillar
+      console.log(`Found gap at axial [${targetAxial.q}, ${targetAxial.r}] - creating virtual gap pillar`)
+      const size = radius * 0.85
+      const x = size * (Math.sqrt(3) * targetAxial.q + Math.sqrt(3) / 2 * targetAxial.r)
+      const z = size * (3 / 2 * targetAxial.r)
+      
+      return {
+        key: `gap-${targetAxial.q}-${targetAxial.r}`,
+        pos: [x, 0, z] as [number, number, number],
+        height: 0
+      }
+    } else if (isOutside) {
+      // This is outside the board - green hexagon
+      console.log(`Found green hexagon at axial [${targetAxial.q}, ${targetAxial.r}]`)
+      const size = radius * 0.85
+      const x = size * (Math.sqrt(3) * targetAxial.q + Math.sqrt(3) / 2 * targetAxial.r)
+      const z = size * (3 / 2 * targetAxial.r)
+      
+      // Create a regular pillar ID for the green hexagon
+      const greenPillarId = `${x}-${z}`
+      const greenHeight = getPillarHeight(greenPillarId) || 0
+      
+      return {
+        key: greenPillarId,
+        pos: [x, 0, z] as [number, number, number],
+        height: greenHeight
+      }
+    }
+    
+    console.log(`No valid target found at axial position [${targetAxial.q}, ${targetAxial.r}]`)
     return null
   }
   
@@ -457,17 +621,47 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     const size = radius * 0.85 // Match the spacing scale from HexGrid
     const q = (Math.sqrt(3) / 3 * x - 1 / 3 * z) / size
     const r = (2 / 3 * z) / size
-    return { q: Math.round(q), r: Math.round(r) }
+    return { q: Math.round(q), r: Math.round(r) } // Round to nearest integer to avoid floating point errors
   }
 
-  const handleSegmentClick = (segmentIndex: number, direction: [number, number, number]) => {
+
+
+  const handleSegmentClick = (segmentIndex: number, direction: [number, number, number], triggerAnimation: boolean = false) => {
     const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
+    console.log(`DEBUG: Direction passed to handleSegmentClick: [${direction.join(',')}]`)
+    
+    // Check if this is a green hexagon (coins in green hexagons cannot move)
+    const isGreenHexagon = !pillarKey.startsWith('p-')
+    if (isGreenHexagon) {
+      console.log(`Pillar ${pillarId}: coin in green hexagon clicked - no movement allowed`)
+      return
+    }
     
     // All colored coins can move
     if (directionKey !== '1,0,0' && directionKey !== '-1,1,0' && directionKey !== '0,1,0' && directionKey !== '-1,0,0' && directionKey !== '0,-1,0' && directionKey !== '1,-1,0') {
       console.log(`Pillar ${pillarId}: static coin clicked - no movement allowed`)
+      console.log(`=== CLICK DEBUG END (STATIC COIN) ===`)
       return
     }
+    
+    console.log(`Coin is movable - proceeding with movement logic...`)
+
+    // If this is a chain movement, trigger the animation state
+    if (triggerAnimation) {
+      console.log(`Triggering animation for segment ${segmentIndex} in chain movement`)
+      setAnimatingSegments(prev => new Set(prev).add(segmentIndex))
+      
+      // Also trigger the animation by dispatching a custom event to the specific segment
+      console.log(`Dispatching triggerSegmentAnimation event for pillar ${pillarId}, segment ${segmentIndex}`)
+      const triggerAnimationEvent = new CustomEvent('triggerSegmentAnimation', {
+        detail: {
+          pillarId: pillarId,
+          segmentIndex: segmentIndex
+        }
+      })
+      window.dispatchEvent(triggerAnimationEvent)
+    }
+
     
     console.log(`Pillar ${pillarId}: ${directionKey === '1,0,0' ? 'red' : directionKey === '-1,1,0' ? 'green' : directionKey === '0,1,0' ? 'yellow' : directionKey === '-1,0,0' ? 'blue' : directionKey === '0,-1,0' ? 'cyan' : 'magenta'} coin moving in direction [${direction.join(',')}]`)
     
@@ -481,15 +675,18 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     
     console.log(`Current segment world position: [${currentSegmentWorldPos.join(',')}]`)
     
+    
     // Find the next pillar in the direction from current position
+    console.log(`Looking for next pillar from position [${currentSegmentWorldPos.join(',')}] in direction [${direction.join(',')}]`)
+    console.log(`Current segment height: ${segmentIndex + 1} (segment index: ${segmentIndex})`)
     const nextPillar = findNextPillar(currentSegmentWorldPos, direction)
     
     if (!nextPillar) {
-      console.log(`Coin moving to stacking area! +1 point!`)
+      console.log(`No next pillar found - coin moving to void! +1 point!`)
       // Play void drop sound
       soundManager.playVoidDrop()
       
-      // Get color name for stacking
+      // Get color name
       const colorMap: Record<string, string> = {
         '1,0,0': 'red',
         '-1,1,0': 'green',
@@ -499,9 +696,6 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
         '1,-1,0': 'magenta'
       }
       const color = colorMap[directionKey] || 'gray'
-      
-      // Find the nearest stacking area based on direction
-      const targetStackingArea = findNearestStackingArea(direction)
       
       // Coin drops into void - just remove it and add score
       const currentHeight = pillarConfigs.get(pillarId) || 0
@@ -520,9 +714,9 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
       addMoveToHistory({
         type: 'void_drop',
         points: 1,
-        description: `${color} coin moved to stacking area`
+        description: `${color} coin dropped into void`
       })
-      // Start animation to move to stacking area
+      // Start animation to flip into void
       setAnimatingSegments(prev => new Set([...prev, segmentIndex]))
       return
     }
@@ -534,6 +728,8 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     const currentSegmentHeight = segmentIndex + 1
     
     console.log(`Moving segment height: ${currentSegmentHeight} (segment index: ${segmentIndex})`)
+    console.log(`Target pillar key: ${nextPillar.key}`)
+    console.log(`Is target a green hexagon? ${!nextPillar.key.startsWith('p-')}`)
     
     // Get target pillar's current height from global state
     const targetPillarId = `${nextPillar.pos[0]}-${nextPillar.pos[2]}`
@@ -541,9 +737,13 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     
     console.log(`Target pillar current height: ${targetPillarHeight}`)
     
-    // Check if we can move to this pillar
-    if (targetPillarHeight > currentSegmentHeight) {
-      console.log(`Cannot move - target pillar is taller (${targetPillarHeight} > ${currentSegmentHeight})`)
+    // Check if we can move to this pillar (no height constraint for green hexagons)
+    const isTargetGreenHexagon = !nextPillar.key.startsWith('p-')
+    console.log(`Height check: targetPillarHeight=${targetPillarHeight}, currentSegmentHeight=${currentSegmentHeight}, isTargetGreenHexagon=${isTargetGreenHexagon}`)
+    console.log(`Height comparison: ${targetPillarHeight} > ${currentSegmentHeight} = ${targetPillarHeight > currentSegmentHeight}`)
+    
+    if (!isTargetGreenHexagon && targetPillarHeight > currentSegmentHeight) {
+      console.log(`BLOCKED: Cannot move - target pillar is taller (${targetPillarHeight} > ${currentSegmentHeight})`)
       // Play blocked sound
       soundManager.playBlocked()
       
@@ -556,8 +756,11 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
       // Start blocked animation (different spinning)
       setAnimatingSegments(prev => new Set([...prev, segmentIndex]))
       setBlockedAnimation(pillarId, segmentIndex, true)
+      console.log(`=== CLICK DEBUG END (BLOCKED) ===`)
       return
     }
+    
+    console.log(`ALLOWED: Coin will move to pillar: ${nextPillar.key}`)
     
     // Play coin drop sound for valid move
     soundManager.playCoinDrop()
@@ -587,6 +790,7 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     const offsetX = (Math.sin(seedX) * 0.5 + 0.5 - 0.5) * 0.04 // ±0.02 horizontal offset
     const offsetZ = (Math.sin(seedZ) * 0.5 + 0.5 - 0.5) * 0.04 // ±0.02 horizontal offset
     const direction = getCoinDirection(pillarId, i) // Get stored direction for this coin
+    console.log(`Coin ${i} in pillar ${pillarId}: stored direction [${direction.join(',')}]`)
 
     // For movable coins, calculate the target position based on direction
     const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
@@ -599,6 +803,13 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
         position[0], // X position of current pillar
         segmentY,    // Y position of this segment
         position[2]  // Z position of current pillar
+      ]
+      
+      // Calculate target position
+      const targetPosition: [number, number, number] = [
+        currentSegmentWorldPos[0] + direction[0] * 1.5 * 0.85,
+        currentSegmentWorldPos[1],
+        currentSegmentWorldPos[2] + direction[1] * 1.5 * 0.85
       ]
       
       const nextPillar = findNextPillar(currentSegmentWorldPos, direction)
@@ -620,16 +831,14 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
         console.log(`Target pillar ${targetPillarId}: current height ${targetPillarCurrentHeight}, target Y ${targetY}`)
         console.log(`Animation target position: [${redCoinTargetPosition.join(',')}]`)
       } else {
-        // No target pillar - move to stacking area
-        const targetStackingArea = findNearestStackingArea(direction)
-        
+        // No target pillar - flip into void
         redCoinTargetPosition = [
-          targetStackingArea[0] - position[0], // X offset to stacking area
-          targetStackingArea[1] - segmentY,    // Y offset to stacking area
-          targetStackingArea[2] - position[2]  // Z offset to stacking area
+          direction[0] * 2, // Move away from board
+          -2 - segmentY,    // Drop down
+          direction[1] * 2  // Move away from board
         ]
         
-        console.log(`Coin moving to stacking area: [${redCoinTargetPosition.join(',')}]`)
+        console.log(`Coin flipping into void: [${redCoinTargetPosition.join(',')}]`)
       }
     }
 
@@ -650,11 +859,13 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
         direction={direction}
         targetPosition={redCoinTargetPosition}
         isBlocked={isBlocked}
+        pillarId={pillarId}
         onAnimationComplete={(finalPos) => {
           console.log(`Animation complete for segment ${i} at position [${finalPos.join(',')}]`)
           
-          // Check if this was a blocked animation
-          if (isBlocked) {
+          // Check if this was a blocked animation (check current state, not captured value)
+          const currentlyBlocked = isBlockedAnimation(pillarId, i)
+          if (currentlyBlocked) {
             console.log(`Blocked animation complete - coin stays in place`)
             setBlockedAnimation(pillarId, i, false)
           } else if (redCoinTargetPosition && redCoinTargetPosition[1] < 0) {
@@ -669,16 +880,19 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
               redCoinTargetPosition[1],
               position[2] + redCoinTargetPosition[2]
             ]
+            
+            // Convert target position to axial coordinates to get the correct ID
+            const targetAxial = worldToAxial(targetPillarPos[0], targetPillarPos[2])
             const targetPillarId = `${targetPillarPos[0]}-${targetPillarPos[2]}`
             
             // Remove coin from current pillar
             const currentHeight = pillarConfigs.get(pillarId) || 0
             setPillarHeight(pillarId, currentHeight - 1)
             
-            // Add coin to target pillar
+            // Add coin to target pillar (whether it's regular or green hexagon)
             const targetHeight = pillarConfigs.get(targetPillarId) || 0
             setPillarHeight(targetPillarId, targetHeight + 1)
-            
+              
             // Preserve the coin's direction when moving to target pillar
             const coinDirection = getCoinDirection(pillarId, i)
             setCoinDirection(targetPillarId, targetHeight, coinDirection)
@@ -695,8 +909,12 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
               addScore(2)
             }
             
-            console.log(`Moved coin: ${pillarId} (${currentHeight} -> ${currentHeight - 1}), ${targetPillarId} (${targetHeight} -> ${targetHeight + 1})`)
-            console.log(`Coin direction preserved: [${coinDirection.join(',')}]`)
+            // Check if the coin can continue moving in the same direction from its NEW location
+            setTimeout(() => {
+              checkAndContinueMove(targetPillarId, newTargetHeight - 1, coinDirection)
+            }, 0) // No delay for instant chaining
+            
+            console.log(`Moved coin: ${pillarId} (${currentHeight} -> ${currentHeight - 1}), ${targetPillarId}`)
             console.log(`Target pillar position: [${targetPillarPos.join(',')}]`)
           }
           
