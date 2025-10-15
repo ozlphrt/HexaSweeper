@@ -1,51 +1,37 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 export function FpsCounter() {
   const [fps, setFps] = useState(0)
-  const frameCount = useRef(0)
-  const lastTime = useRef(Date.now())
-  const animationId = useRef<number>()
+  const [frameCount, setFrameCount] = useState(0)
+  const [lastTime, setLastTime] = useState(performance.now())
 
   useEffect(() => {
-    const updateFps = () => {
-      frameCount.current++
-      const now = Date.now()
-      const deltaTime = now - lastTime.current
+    let animationId: number
 
-      if (deltaTime >= 1000) { // Update every second
-        const currentFps = Math.round((frameCount.current * 1000) / deltaTime)
-        setFps(currentFps)
-        frameCount.current = 0
-        lastTime.current = now
+    const updateFPS = (currentTime: number) => {
+      setFrameCount(prev => prev + 1)
+      
+      if (currentTime - lastTime >= 1000) {
+        setFps(Math.round((frameCount * 1000) / (currentTime - lastTime)))
+        setFrameCount(0)
+        setLastTime(currentTime)
       }
-
-      animationId.current = requestAnimationFrame(updateFps)
+      
+      animationId = requestAnimationFrame(updateFPS)
     }
 
-    animationId.current = requestAnimationFrame(updateFps)
+    animationId = requestAnimationFrame(updateFPS)
 
     return () => {
-      if (animationId.current) {
-        cancelAnimationFrame(animationId.current)
+      if (animationId) {
+        cancelAnimationFrame(animationId)
       }
     }
-  }, [])
+  }, [frameCount, lastTime])
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: '10px',
-      right: '10px',
-      background: 'rgba(0, 0, 0, 0.7)',
-      color: 'white',
-      padding: '8px 12px',
-      borderRadius: '4px',
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      zIndex: 1000,
-      pointerEvents: 'none'
-    }}>
-      FPS: {fps}
+    <div className="fps-counter">
+      {fps} FPS
     </div>
   )
 }

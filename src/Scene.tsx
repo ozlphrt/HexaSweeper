@@ -2,6 +2,7 @@ import React from 'react'
 import { useThree } from '@react-three/fiber'
 import { HexGrid } from './HexGrid'
 import { TestCoin } from './TestCoin'
+import { Confetti } from './Confetti'
 import { useStore } from './store'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -20,6 +21,8 @@ export default function Scene({ calibrationMode = false, testCoin }: SceneProps)
   const sunlight = useStore(s => s.sunlight)
   const ambientLight = useStore(s => s.ambientLight)
   const focus = useStore(s => s.cameraRigTarget)
+  const confettiEvents = useStore(s => s.confettiEvents)
+  const removeConfetti = useStore(s => s.removeConfetti)
 
   const dirLight = React.useRef<THREE.DirectionalLight>(null!)
   const { camera, controls } = useThree()
@@ -50,7 +53,7 @@ export default function Scene({ calibrationMode = false, testCoin }: SceneProps)
   return (
     <>
       {/* Atmospheric fog */}
-      <fog attach="fog" args={['#2c3e50', 15, 50]} />
+      <fog attach="fog" args={['#2c3e50', 25, 80]} />
       
       {/* Key Light - Main directional light */}
       <directionalLight
@@ -130,6 +133,87 @@ export default function Scene({ calibrationMode = false, testCoin }: SceneProps)
           )}
         </>
       )}
+
+      {/* Confetti Effects */}
+      {confettiEvents.map((event) => (
+        <Confetti
+          key={event.id}
+          position={event.position}
+          isActive={event.isActive}
+          onComplete={() => removeConfetti(event.id)}
+        />
+      ))}
+
+      {/* Empty Pillar Bases around the board - outside edge tiles */}
+      {(() => {
+        const pillarBases = []
+        const radius = 1.0
+        const spacingScale = 0.85
+        const rows = 10
+        const cols = 10
+        
+        // Hexagonal positioning function (same as HexGrid)
+        const hexPosition = (q: number, r: number) => {
+          const size = radius * spacingScale
+          const x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r)
+          const z = size * (3 / 2 * r)
+          return [x, 0, z] as const
+        }
+        
+        const r0 = -Math.floor(rows / 2)
+        const c0 = -Math.floor(cols / 2)
+        
+        // Hexagonal neighbor directions (flat-top hexagons)
+        const hexDirections = [
+          [1, 0],   // East
+          [1, -1],  // Northeast  
+          [0, -1],  // Northwest
+          [-1, 0],  // West
+          [-1, 1],  // Southwest
+          [0, 1]    // Southeast
+        ]
+        
+        // Find edge positions and place empty bases outside them following honeycomb structure
+        for (let q = 0; q < cols; q++) {
+          for (let r = 0; r < rows; r++) {
+            const [x, y, z] = hexPosition(q + c0, r + r0, radius, spacingScale)
+            
+            // Check if this is an edge position
+            const isEdge = q === 0 || q === cols - 1 || r === 0 || r === rows - 1
+            
+            if (isEdge) {
+              // For each edge tile, place empty bases in all 6 hexagonal directions
+              // that would be outside the board
+              hexDirections.forEach(([dq, dr], dirIndex) => {
+                const neighborQ = q + dq
+                const neighborR = r + dr
+                
+                // Check if this neighbor would be outside the board
+                const isOutside = neighborQ < 0 || neighborQ >= cols || neighborR < 0 || neighborR >= rows
+                
+                if (isOutside) {
+                  // Place empty base at this neighbor position
+                  const [neighborX, neighborY, neighborZ] = hexPosition(
+                    neighborQ + c0, 
+                    neighborR + r0, 
+                    radius, 
+                    spacingScale
+                  )
+                  
+                  pillarBases.push(
+                    <mesh key={`edge-${q}-${r}-${dirIndex}`} position={[neighborX, neighborY, neighborZ]}>
+                      <cylinderGeometry args={[1.0, 1.0, 0.1, 6]} />
+                      <meshStandardMaterial color="#1a4d1a" />
+                    </mesh>
+                  )
+                }
+              })
+            }
+          }
+        }
+        
+        return pillarBases
+      })()}
     </>
   )
 }

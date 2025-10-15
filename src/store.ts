@@ -20,6 +20,36 @@ type State = {
   setBlockedAnimation: (pillarId: string, coinIndex: number, isBlocked: boolean) => void
   isBlockedAnimation: (pillarId: string, coinIndex: number) => boolean
 
+  // Scoring System
+  score: number
+  setScore: (score: number) => void
+  addScore: (points: number) => void
+  moveHistory: Array<{
+    type: 'void_drop' | 'valid_move' | 'blocked_move' | 'chain_reaction'
+    points: number
+    description: string
+    timestamp: number
+  }>
+  addMoveToHistory: (move: Omit<State['moveHistory'][0], 'timestamp'>) => void
+  getScoreBreakdown: () => {
+    voidDrops: number
+    validMoves: number
+    blockedMoves: number
+    chainReactions: number
+    totalMoves: number
+  }
+
+  // Confetti System
+  confettiEvents: Array<{
+    id: string
+    position: [number, number, number]
+    isActive: boolean
+    timestamp: number
+  }>
+  triggerConfetti: (position: [number, number, number]) => void
+  removeConfetti: (id: string) => void
+
+
   resetScene: () => void
 }
 
@@ -71,6 +101,42 @@ export const useStore = create<State>((set, get) => ({
     return get().blockedAnimations.has(key)
   },
 
+  // Scoring System
+  score: 0,
+  setScore: (score) => set({ score }),
+  addScore: (points) => set((state) => ({ score: state.score + points })),
+  moveHistory: [],
+  addMoveToHistory: (move) => set((state) => ({
+    moveHistory: [...state.moveHistory, { ...move, timestamp: Date.now() }]
+  })),
+  getScoreBreakdown: () => {
+    const history = get().moveHistory
+    return {
+      voidDrops: history.filter(m => m.type === 'void_drop').length,
+      validMoves: history.filter(m => m.type === 'valid_move').length,
+      blockedMoves: history.filter(m => m.type === 'blocked_move').length,
+      chainReactions: history.filter(m => m.type === 'chain_reaction').length,
+      totalMoves: history.length
+    }
+  },
+
+  // Confetti System
+  confettiEvents: [],
+  triggerConfetti: (position) => set((state) => {
+    const id = `confetti-${Date.now()}-${Math.random()}`
+    return {
+      confettiEvents: [...state.confettiEvents, {
+        id,
+        position,
+        isActive: true,
+        timestamp: Date.now()
+      }]
+    }
+  }),
+  removeConfetti: (id) => set((state) => ({
+    confettiEvents: state.confettiEvents.filter(event => event.id !== id)
+  })),
+
   resetScene: () => {
     // Soft reset: just clear camera focus; user can refresh to fully reset bodies
     set({ 
@@ -79,7 +145,10 @@ export const useStore = create<State>((set, get) => ({
       ambientLight: 0.0, 
       pillarConfigs: new Map(), 
       coinDirections: new Map(), 
-      blockedAnimations: new Set()
+      blockedAnimations: new Set(),
+      score: 0,
+      moveHistory: [],
+      confettiEvents: []
     })
   },
 }))
