@@ -73,6 +73,13 @@ export const useStore = create<State>((set, get) => ({
 
   resetScene: () => {
     // Soft reset: just clear camera focus; user can refresh to fully reset bodies
-    set({ cameraRigTarget: null, sunlight: 1.0, ambientLight: 0.0, pillarConfigs: new Map(), coinDirections: new Map(), blockedAnimations: new Set() })
+    set({ 
+      cameraRigTarget: null, 
+      sunlight: 1.0, 
+      ambientLight: 0.0, 
+      pillarConfigs: new Map(), 
+      coinDirections: new Map(), 
+      blockedAnimations: new Set()
+    })
   },
 }))

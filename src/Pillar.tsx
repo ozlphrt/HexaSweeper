@@ -22,7 +22,23 @@ function DirectionArrow({ direction, color }: {
   const arrowHeight = 0.1 // Position just touching the segment (half of segmentHeight)
   
   // Calculate rotation to point in the direction
-  const angle = Math.atan2(direction[2], direction[0])
+  // For hexagonal grid: direction[0] = q (horizontal), direction[1] = r (vertical)
+  // Convert axial coordinates to world direction vector
+  const worldX = direction[0] + direction[1] * 0.5
+  const worldZ = direction[1] * Math.sqrt(3) / 2
+  let angle = Math.atan2(worldZ, worldX)
+  
+  // Adjust arrows to point correctly
+  const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
+  if (directionKey === '-1,1,0') {
+    angle += Math.PI * 2 / 3 // Green: Add 120 degrees (2 * 60°) to the right
+  } else if (directionKey === '0,1,0') {
+    angle -= Math.PI * 2 / 3 // Yellow: Subtract 120 degrees (2 * 60°) to the left
+  } else if (directionKey === '0,-1,0') {
+    angle -= Math.PI * 2 / 3 // Cyan: Subtract 120 degrees (2 * 60°) to the left
+  } else if (directionKey === '1,-1,0') {
+    angle += Math.PI * 2 / 3 // Magenta: Add 120 degrees (2 * 60°) to the right
+  }
   
   // Clone the scene and replace materials to match coin color exactly
   const clonedScene = useMemo(() => {
@@ -67,20 +83,26 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
 }) {
   const [hovered, setHovered] = useState(false)
   const [isMoving, setIsMoving] = useState(false)
+  const [isFlipping, setIsFlipping] = useState(false)
   const [spinRotation, setSpinRotation] = useState(0)
   const [animationProgress, setAnimationProgress] = useState(0)
   const [startPosition, setStartPosition] = useState<[number, number, number]>(position)
   const [currentTargetPosition, setCurrentTargetPosition] = useState<[number, number, number]>(targetPosition || position)
+  const [arrowAngle, setArrowAngle] = useState(0)
   const meshRef = useRef<THREE.Mesh>(null)
   useCursor(hovered)
 
   // Animate flipping and movement
   useFrame((state, delta) => {
-    if (isMoving && meshRef.current) {
+    // Start flipping immediately when clicked, before movement
+    if (isFlipping && meshRef.current) {
       setAnimationProgress(prev => {
-        const newProgress = prev + delta * 3 // 3 units per second (0.33 second duration)
+        // Different duration for blocked vs normal animations
+        const animationSpeed = isBlocked ? 6 : 3 // 6 units per second for blocked (0.17s), 3 for normal (0.33s)
+        const newProgress = prev + delta * animationSpeed
         if (newProgress >= 1) {
           setIsMoving(false)
+          setIsFlipping(false)
           setAnimationProgress(0)
           setSpinRotation(0)
           // Call completion callback with final position
@@ -94,16 +116,36 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
       
       // Update rotation - different animation for blocked vs normal movement
       if (isBlocked) {
-        // Blocked animation: shaking back and forth rapidly
+        // Blocked animation: just shaking back and forth rapidly
         setSpinRotation(prev => {
-          // Shake between -0.3 and 0.3 radians (about 17 degrees each way)
           const shakeAmount = 0.3
-          const shakeSpeed = 80 // Very fast shaking
+          const shakeSpeed = 120 // Even faster shaking
           return Math.sin(state.clock.elapsedTime * shakeSpeed) * shakeAmount
         })
       } else {
-        // Normal movement: fast synchronized spinning
-        setSpinRotation(prev => prev + delta * 18) // Faster spinning to match movement speed
+        // Normal movement: spinning around the arrow direction axis
+        // Calculate the arrow direction angle (same as in DirectionArrow)
+        const worldX = direction[0] + direction[1] * 0.5
+        const worldZ = direction[1] * Math.sqrt(3) / 2
+        let arrowAngle = Math.atan2(worldZ, worldX)
+        
+        // Adjust for green, yellow, cyan, and magenta arrows if needed (same adjustment as in DirectionArrow)
+        const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
+        if (directionKey === '-1,1,0') {
+          arrowAngle += Math.PI * 2 / 3 // Green: Add 120 degrees to the right
+        } else if (directionKey === '0,1,0') {
+          arrowAngle -= Math.PI * 2 / 3 // Yellow: Subtract 120 degrees to the left
+        } else if (directionKey === '0,-1,0') {
+          arrowAngle -= Math.PI * 2 / 3 // Cyan: Subtract 120 degrees to the left
+        } else if (directionKey === '1,-1,0') {
+          arrowAngle += Math.PI * 2 / 3 // Magenta: Add 120 degrees to the right
+        }
+        
+        // Spin around the Z-axis with the arrow direction as the rotation axis
+        setSpinRotation(prev => prev + delta * 18) // Keep the same speed
+        
+        // Store the arrow angle for use in rotation
+        setArrowAngle(arrowAngle)
       }
     }
   })
@@ -143,29 +185,58 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
   }, [radius, segmentHeight])
 
   const color = useMemo(() => {
-    // For now, only red coins can move - others are neutral gray
+    // All coins are now white, regardless of direction
+    return new THREE.Color('#ffffff') // white for all coins
+  }, [direction])
+
+  // Arrow colors based on direction
+  const arrowColor = useMemo(() => {
     const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
     
-    // Only red direction [1, 0, 0] gets the red color and can move
     if (directionKey === '1,0,0') {
-      return new THREE.Color('#bb7777') // red - movable
+      return new THREE.Color('#bb7777') // red arrow
+    } else if (directionKey === '-1,1,0') {
+      return new THREE.Color('#77bb77') // green arrow
+    } else if (directionKey === '0,1,0') {
+      return new THREE.Color('#bbbb77') // yellow arrow
+    } else if (directionKey === '-1,0,0') {
+      return new THREE.Color('#7777bb') // blue arrow
+    } else if (directionKey === '0,-1,0') {
+      return new THREE.Color('#77bbbb') // cyan arrow
+    } else if (directionKey === '1,-1,0') {
+      return new THREE.Color('#bb77bb') // magenta arrow
     } else {
-      return new THREE.Color('#888888') // gray - static
+      return new THREE.Color('#888888') // gray arrow for static coins
     }
   }, [direction])
 
   const mat = useMemo(() => {
+    // Create creamy white with subtle variations based on segment index
+    const baseR = 0.98 // Slightly warm red component
+    const baseG = 0.96 // Slightly warm green component  
+    const baseB = 0.92 // Creamy blue component
+    
+    // Add subtle variation based on segment index and direction
+    const variation = Math.sin(segmentIndex * 2.3 + direction[0] * 1.7 + direction[1] * 1.1) * 0.02
+    const r = Math.max(0.9, Math.min(1.0, baseR + variation))
+    const g = Math.max(0.9, Math.min(1.0, baseG + variation * 0.8))
+    const b = Math.max(0.85, Math.min(0.95, baseB + variation * 1.2))
+    
     return new THREE.MeshStandardMaterial({
-      color: color,
-      roughness: 0.3, // Softer, less reflective like polished plastic
-    metalness: 0.0
+      color: new THREE.Color(r, g, b), // Creamy white with subtle variations
+      roughness: 0.4, // Slightly more matte for creamy appearance
+      metalness: 0.0, // No metallic properties
+      side: THREE.DoubleSide, // Render both sides for better visibility
+      flatShading: false // Smooth shading for consistent appearance
     })
-  }, [color])
+  }, [segmentIndex, direction])
 
 
   const onClick = (e: any) => {
     e.stopPropagation()
-    if (!isMoving) {
+    if (!isMoving && !isFlipping) {
+      // Start flipping immediately
+      setIsFlipping(true)
       // Use the current position prop as the start position (this will be the correct world position)
       setStartPosition(position)
       setIsMoving(true)
@@ -178,12 +249,11 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
     if (!isMoving || !targetPosition) return position
     
     const t = animationProgress
-    const easeInOut = t * t * (3 - 2 * t) // Smooth easing function
     
-    // Linear interpolation between start and target
-    const x = startPosition[0] + (targetPosition[0] - startPosition[0]) * easeInOut
-    const y = startPosition[1] + (targetPosition[1] - startPosition[1]) * easeInOut + Math.sin(t * Math.PI) * 0.5 // Add arc trajectory
-    const z = startPosition[2] + (targetPosition[2] - startPosition[2]) * easeInOut
+    // Perfectly straight line movement (linear interpolation)
+    const x = startPosition[0] + (targetPosition[0] - startPosition[0]) * t
+    const y = startPosition[1] + (targetPosition[1] - startPosition[1]) * t
+    const z = startPosition[2] + (targetPosition[2] - startPosition[2]) * t
     
     return [x, y, z] as [number, number, number]
   }, [isMoving, animationProgress, startPosition, targetPosition, position])
@@ -193,7 +263,7 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
   }
 
   const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
-  const isRedCoin = directionKey === '1,0,0'
+  const isMovableCoin = directionKey === '1,0,0' || directionKey === '-1,1,0' || directionKey === '0,1,0' || directionKey === '-1,0,0' || directionKey === '0,-1,0' || directionKey === '1,-1,0'
 
   return (
     <group position={currentPosition}>
@@ -203,16 +273,35 @@ function HexSegment({ position, radius, segmentHeight, onSegmentClick, segmentIn
         receiveShadow
         geometry={geom}
         material={mat}
-        rotation={[0, 0, -spinRotation]} // Flip around Z-axis (reverse direction)
+        rotation={(() => {
+          // All coins now flip 180 degrees only
+          if (directionKey === '0,1,0') {
+            // Yellow coins: flip around the edge arrow is pointing to (180 degrees only)
+            return [Math.min(spinRotation, Math.PI), 0, 0]
+          } else if (directionKey === '-1,1,0') {
+            // Green coins: flip around the edge arrow is pointing to (180 degrees only)
+            return [Math.min(spinRotation, Math.PI), 0, 0]
+          } else if (directionKey === '-1,0,0') {
+            // Blue coins: horizontal spin around Z-axis (180 degrees only)
+            return [0, 0, Math.min(spinRotation, Math.PI)]
+          } else if (directionKey === '0,-1,0') {
+            // Cyan coins: flip around the edge arrow is pointing to (180 degrees only)
+            return [Math.min(-spinRotation, -Math.PI), 0, 0]
+          } else if (directionKey === '1,-1,0') {
+            // Magenta coins: flip around the edge arrow is pointing to (180 degrees only)
+            return [0, 0, Math.min(spinRotation, Math.PI)]
+          } else {
+            // Other coins (including red): Z-axis spin (180 degrees only)
+            return [0, 0, Math.min(-spinRotation, -Math.PI)]
+          }
+        })()}
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
         onPointerDown={onPointerDown}
         onClick={onClick}
       />
-      {isRedCoin && (
-        <group rotation={[0, 0, -spinRotation]}> {/* Arrow flips with the coin */}
-          <DirectionArrow direction={direction} color={color} />
-        </group>
+      {isMovableCoin && (
+        <DirectionArrow direction={direction} color={arrowColor} />
       )}
     </group>
   )
@@ -250,8 +339,8 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     // For flat-top hex grid, these are the 6 axial directions
     const directions: [number, number, number][] = [
       [1, 0, 0],      // red - right (axial q+1)
-      [0, 1, 0],      // green - up-right (axial r+1)
-      [-1, 1, 0],     // yellow - up-left (axial q-1, r+1)
+      [-1, 1, 0],     // green - up-left (axial q-1, r+1)
+      [0, 1, 0],      // yellow - up-right (axial r+1)
       [-1, 0, 0],     // blue - left (axial q-1)
       [0, -1, 0],     // cyan - down-left (axial r-1)
       [1, -1, 0]      // magenta - down-right (axial q+1, r-1)
@@ -261,7 +350,7 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
 
   // Get current coin count from global state, or use initial height if not set
   const pillarConfigs = useStore(s => s.pillarConfigs)
-  const currentCoinCount = pillarConfigs.get(pillarId) || height
+  const currentCoinCount = pillarConfigs.has(pillarId) ? pillarConfigs.get(pillarId)! : height
   
   // Initialize pillar height and directions in global state if not already set
   React.useEffect(() => {
@@ -273,7 +362,7 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
         setCoinDirection(pillarId, i, direction)
       }
     }
-  }, [pillarId, height, setPillarHeight, pillarConfigs, setCoinDirection, segmentDirections])
+  }, [pillarId, setPillarHeight, pillarConfigs, setCoinDirection, segmentDirections])
   
 
   // Function to find the next pillar in a given direction using axial coordinates
@@ -315,13 +404,13 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
   const handleSegmentClick = (segmentIndex: number, direction: [number, number, number]) => {
     const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
     
-    // Only red coins can move
-    if (directionKey !== '1,0,0') {
-      console.log(`Pillar ${pillarId}: gray coin clicked - no movement allowed`)
+    // All colored coins can move
+    if (directionKey !== '1,0,0' && directionKey !== '-1,1,0' && directionKey !== '0,1,0' && directionKey !== '-1,0,0' && directionKey !== '0,-1,0' && directionKey !== '1,-1,0') {
+      console.log(`Pillar ${pillarId}: static coin clicked - no movement allowed`)
       return
     }
     
-    console.log(`Pillar ${pillarId}: red coin moving in direction [${direction.join(',')}]`)
+    console.log(`Pillar ${pillarId}: ${directionKey === '1,0,0' ? 'red' : directionKey === '-1,1,0' ? 'green' : directionKey === '0,1,0' ? 'yellow' : directionKey === '-1,0,0' ? 'blue' : directionKey === '0,-1,0' ? 'cyan' : 'magenta'} coin moving in direction [${direction.join(',')}]`)
     
     // Calculate current world position of this segment
     const segmentY = (segmentIndex + 0.5) * segmentHeight
@@ -373,17 +462,24 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
   }
 
   const segments_ = []
-  // Render the remaining segments stacked from bottom up
+  // Render the remaining segments stacked from bottom up with slight randomness
   for (let i = 0; i < currentCoinCount; i++) {
-    const segmentY = (i + 0.5) * segmentHeight
+    // With gravity, segments should touch each other but can be imperfect horizontally
+    const segmentY = i * segmentHeight + segmentHeight/2 // Perfect vertical stacking (gravity)
+    
+    // Add horizontal randomness (X and Z offsets)
+    const seedX = i * 13 + pillarId.length
+    const seedZ = i * 17 + pillarId.length * 2
+    const offsetX = (Math.sin(seedX) * 0.5 + 0.5 - 0.5) * 0.04 // ±0.02 horizontal offset
+    const offsetZ = (Math.sin(seedZ) * 0.5 + 0.5 - 0.5) * 0.04 // ±0.02 horizontal offset
     const direction = getCoinDirection(pillarId, i) // Get stored direction for this coin
 
-    // For red coins that can move, calculate the target position based on direction
+    // For movable coins, calculate the target position based on direction
     const directionKey = `${direction[0]},${direction[1]},${direction[2]}`
-    const isRedCoin = directionKey === '1,0,0'
+    const isMovableCoin = directionKey === '1,0,0' || directionKey === '-1,1,0' || directionKey === '0,1,0' || directionKey === '-1,0,0' || directionKey === '0,-1,0' || directionKey === '1,-1,0'
     let redCoinTargetPosition: [number, number, number] | undefined = undefined
     
-    if (isRedCoin && animatingSegments.has(i)) {
+    if (isMovableCoin && animatingSegments.has(i)) {
       // Calculate where this red coin should move to from its current position
       const currentSegmentWorldPos: [number, number, number] = [
         position[0], // X position of current pillar
@@ -426,7 +522,7 @@ export function Pillar({ position, height, radius, allPillars }: Props) {
     }
 
     // Segment position is always relative to current pillar
-    const segmentPosition: [number, number, number] = [0, segmentY, 0]
+    const segmentPosition: [number, number, number] = [offsetX, segmentY, offsetZ]
 
     // Check if this coin is in blocked animation state
     const isBlocked = isBlockedAnimation(pillarId, i)

@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import Scene from './Scene'
 import { useStore } from './store'
+import { FpsCounter } from './FpsCounter'
 
 export default function App() {
   const reset = useStore(s => s.resetScene)
@@ -23,6 +24,7 @@ export default function App() {
         <Scene />
         <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
       </Canvas>
+      <FpsCounter />
       <div className="credits">Click a pillar to drop it. Camera will pan/zoom to focus.</div>
     </>
   )

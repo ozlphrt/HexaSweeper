@@ -21,8 +21,13 @@ export function HexGrid({ rows, cols, radius, spacingScale = 1.0 }: Props) {
     const arr: { key: string, pos: [number, number, number], height: number }[] = []
     const r0 = -Math.floor(rows / 2)
     const c0 = -Math.floor(cols / 2)
+    
     for (let q = 0; q < cols; q++) {
       for (let r = 0; r < rows; r++) {
+        // Create gaps in the grid - skip some positions randomly
+        const shouldSkip = Math.random() < 0.2 // 20% chance of gap
+        if (shouldSkip) continue
+        
         const [x, y, z] = hexPosition(q + c0, r + r0, radius, spacingScale)
         const segmentCount = Math.floor(2 + Math.random() * 9) // Random 2-10 segments
         arr.push({ key: `p-${q}-${r}`, pos: [x, y, z], height: segmentCount })

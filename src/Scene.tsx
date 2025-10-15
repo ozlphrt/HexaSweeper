@@ -1,11 +1,22 @@
 import React from 'react'
 import { useThree } from '@react-three/fiber'
 import { HexGrid } from './HexGrid'
+import { TestCoin } from './TestCoin'
 import { useStore } from './store'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-export default function Scene() {
+interface SceneProps {
+  calibrationMode?: boolean
+  testCoin?: {
+    position: [number, number, number]
+    direction: [number, number, number]
+    isFlipping: boolean
+    onFlipComplete?: () => void
+  }
+}
+
+export default function Scene({ calibrationMode = false, testCoin }: SceneProps) {
   const sunlight = useStore(s => s.sunlight)
   const ambientLight = useStore(s => s.ambientLight)
   const focus = useStore(s => s.cameraRigTarget)
@@ -38,18 +49,24 @@ export default function Scene() {
 
   return (
     <>
+      {/* Atmospheric fog */}
+      <fog attach="fog" args={['#2c3e50', 15, 50]} />
+      
       {/* Key Light - Main directional light */}
       <directionalLight
         ref={dirLight}
         castShadow
         position={[15, 20, 10]}
         intensity={sunlight * 1.2}
-        shadow-mapSize={[4096, 4096]}
+        shadow-mapSize={[1024, 1024]}
         shadow-camera-far={100}
         shadow-camera-left={-20}
         shadow-camera-right={20}
         shadow-camera-top={20}
         shadow-camera-bottom={-20}
+        shadow-radius={12}
+        shadow-bias={-0.0001}
+        shadow-normalBias={0.02}
       />
       
       {/* Fill Light - Soft directional light from opposite side */}
@@ -74,9 +91,45 @@ export default function Scene() {
       />
       
       {/* Soft ambient fill */}
-      <ambientLight intensity={0.45 + ambientLight * 0.2} color="#ffffff" />
+      <ambientLight intensity={0.25 + ambientLight * 0.2} color="#ffffff" />
       
-      <HexGrid rows={10} cols={10} radius={1.0} spacingScale={0.85} />
+      {/* Casino green base plane that receives shadows */}
+      <mesh 
+        rotation={[-Math.PI / 2, 0, 0]} 
+        position={[0, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[50, 50]} />
+        <meshStandardMaterial 
+          color="#0F5132" 
+          roughness={0.8}
+          metalness={0.0}
+        />
+      </mesh>
+      
+      {!calibrationMode ? (
+        <HexGrid rows={10} cols={10} radius={1.0} spacingScale={0.85} />
+      ) : (
+        <>
+          {/* Test coin with flipping animation */}
+          {testCoin && (
+            <TestCoin 
+              position={testCoin.position}
+              direction={testCoin.direction}
+              isFlipping={testCoin.isFlipping}
+              onFlipComplete={testCoin.onFlipComplete}
+            />
+          )}
+          
+          {/* Target position indicator */}
+          {testCoin && (
+            <mesh position={[testCoin.position[0] + testCoin.direction[0] * 2, testCoin.position[1], testCoin.position[2] + testCoin.direction[1] * 2]}>
+              <cylinderGeometry args={[0.5, 0.5, 0.2, 6]} />
+              <meshStandardMaterial color="#ff0000" transparent opacity={0.3} />
+            </mesh>
+          )}
+        </>
+      )}
     </>
   )
 }
