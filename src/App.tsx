@@ -14,14 +14,13 @@ function GameUI() {
   const revealedCells = Object.values(cellStates).filter(cell => cell.isRevealed && !cell.isMine).length
   const safeCells = totalCells - mineCount
   const progress = safeCells > 0 ? (revealedCells / safeCells) * 100 : 0
+  
+  // Calculate flagged mines (correctly flagged)
+  const flaggedMines = Object.values(cellStates).filter(cell => cell.isFlagged && cell.isMine).length
 
   return (
     <div className="game-ui">
       <div className="game-status">
-        <div className="status-item">
-          <span className="label">Mines:</span>
-          <span className="value">{mineCount - flagCount}</span>
-        </div>
         <div className="status-item">
           <span className="label">Status:</span>
           <span className={`value status-${gameStatus}`}>
@@ -31,16 +30,16 @@ function GameUI() {
         </div>
       </div>
       
-      {/* Progress Bar */}
+      {/* Fancy Glassmorphism Progress Bar */}
       <div className="progress-container">
-        <div className="progress-bar">
+        <div className="progress-bar glassmorphism">
           <div 
             className="progress-fill" 
             style={{ width: `${progress}%` }}
           />
         </div>
-        <div className="progress-text">
-          {revealedCells}/{safeCells} ({progress.toFixed(1)}%)
+        <div className="progress-text large-font">
+          {progress.toFixed(1)}% completed ({flaggedMines} / {mineCount} flagged)
         </div>
       </div>
       
