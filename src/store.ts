@@ -253,6 +253,17 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   resetGame: () => {
+    // First, reset all game state to initial values
+    set({
+      pillarConfigs: [],
+      cellStates: {},
+      gameStatus: 'playing',
+      mineCount: 0,
+      flagCount: 0,
+      revealQueue: [],
+      isRevealing: false
+    })
+
     // Generate a completely new board with new gaps and mine positions
     const radius = 0.8
     const spacingScale = 0.85
