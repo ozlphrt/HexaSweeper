@@ -335,7 +335,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
             debugTextOffset.y + (isFalling ? (fallDistance * fallProgress * fallProgress) : 0), 
             0.02 + debugTextOffset.z
           ]}
-          font="/fonts/helvetiker_bold.typeface.json"
+                  font="./fonts/helvetiker_bold.typeface.json"
           size={radius * 0.65}
           height={radius * 0.1}
           curveSegments={16}
