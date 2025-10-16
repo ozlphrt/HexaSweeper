@@ -5,10 +5,38 @@ import * as THREE from 'three'
 import { useStore } from './store'
 import { soundManager } from './SoundManager'
 
+// Preload the flag GLTF model to prevent first-flag flickering
+useGLTF.preload('/low_poly_golf_flag_animated/scene.gltf')
+
+// Helper function to get neighboring cells in hexagonal grid
+function getNeighbors(key: string, pillarConfigs: { key: string, pos: [number, number, number], height: number }[]): string[] {
+  // Extract coordinates from key (format: "p-q-r")
+  const parts = key.split('-')
+  if (parts.length !== 3) return []
+  
+  const q = parseInt(parts[1])
+  const r = parseInt(parts[2])
+  
+  // Hexagonal neighbors (6 directions)
+  const neighborOffsets = [
+    [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]
+  ]
+  
+  const neighbors: string[] = []
+  neighborOffsets.forEach(([dq, dr]) => {
+    const neighborKey = `p-${q + dq}-${r + dr}`
+    if (pillarConfigs.some(p => p.key === neighborKey)) {
+      neighbors.push(neighborKey)
+    }
+  })
+  
+  return neighbors
+}
+
+
 // Flag component for 3D flag models
 function Flag({ position, scale = 1 }: { position: [number, number, number], scale?: number }) {
   const { scene, animations } = useGLTF('/low_poly_golf_flag_animated/scene.gltf')
-  const { actions } = useAnimations(animations, scene)
   const { debugFlagRotation, debugFlagOffset } = useStore()
   const groupRef = useRef<THREE.Group>(null)
   
@@ -61,25 +89,30 @@ type Props = {
 export function Pillar({ position, height, radius, allPillars, pillarKey }: Props) {
   const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
-  const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset } = useStore()
+  const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset, hoveredTile, setHoveredTile } = useStore()
   
   const segmentHeight = 0.2
   const cellState = cellStates[pillarKey]
+  
+
+  
+  
   
   // Click vs drag detection
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null)
   const dragThreshold = 5 // pixels
+
   
   // Animation state
   const [isFlipping, setIsFlipping] = useState(false)
   const [flipProgress, setFlipProgress] = useState(0)
   const [wasRevealed, setWasRevealed] = useState(false)
   
-  // Falling animation state
+  // Game over falling animation state
   const [isFalling, setIsFalling] = useState(false)
-  const [fallProgress, setFallProgress] = useState(0)
-  const [fallDelay, setFallDelay] = useState(0)
+  const [gameOverFallProgress, setGameOverFallProgress] = useState(0)
+  const [gameOverFallDelay, setGameOverFallDelay] = useState(0)
   const fallDistance = -10 // Fall 10 units down
   
   
@@ -143,11 +176,11 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   const handlePointerUp = (event: any) => {
     if (!isDragging && dragStartPos) {
       // It's a click, not a drag
-              if (event.button === 0) { // Left click
-                event.stopPropagation()
-                if (gameStatus === 'playing' && cellState && !cellState.isFlagged) {
-                  addToRevealQueue(pillarKey)
-                }
+      if (event.button === 0) { // Left click
+        event.stopPropagation()
+        if (gameStatus === 'playing' && cellState && !cellState.isFlagged) {
+          addToRevealQueue(pillarKey)
+        }
       } else if (event.button === 2) { // Right click
         event.stopPropagation()
         if (gameStatus === 'playing' && cellState && !cellState.isRevealed) {
@@ -155,7 +188,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
         }
       }
     }
-    
+
     // Reset drag state
     setIsDragging(false)
     setDragStartPos(null)
@@ -197,13 +230,16 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       return "#27ae60" // Green for revealed safe cells
     }
 
+
     return "#f4efe8" // Creamy white for unrevealed
   }
+
   
   // Trigger flip animation when cell becomes revealed
   React.useEffect(() => {
     if (cellState?.isRevealed && !wasRevealed) {
       setIsFlipping(true)
+      setFlipProgress(0)
       setWasRevealed(true)
       // Play click sound when flip starts
       soundManager.playClick()
@@ -213,97 +249,63 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   // Trigger falling animation when game is over
   React.useEffect(() => {
     if ((gameStatus === 'won' || gameStatus === 'lost') && cellState && !isFalling) {
-      // Make all revealed safe cells fall down
+      // Only make revealed safe cells fall down
+      // Keep visible: unrevealed cells, flagged cells, unflagged mine cells
       if (cellState.isRevealed && !cellState.isMine) {
         // Add random delay for staggered falling effect
         const delay = Math.random() * 2000 // 0-2 seconds delay
-        setFallDelay(delay)
-        
+        setGameOverFallDelay(delay)
+
         setTimeout(() => {
           setIsFalling(true)
+          setGameOverFallProgress(0)
         }, delay)
       }
     }
   }, [gameStatus, cellState, isFalling])
 
+
   useFrame((state, delta) => {
     if (meshRef.current) {
-              // Handle flip animation with spring
-              if (isFlipping) {
-                const flipSpeed = 25.0 // radians per second (much faster)
-                setFlipProgress(prev => {
-                  const newProgress = prev + delta * flipSpeed
-                  if (newProgress >= Math.PI) {
-                    setIsFlipping(false)
-                    return Math.PI
-                  }
-                  return newProgress
-                })
-              }
+      // No press-down effect - tiles stay at original position
+      meshRef.current.position.y = position[1]
 
-      // Apply flip rotation with enhanced spring effect
-      if (isFlipping || flipProgress > 0) {
-        const targetRotation = flipProgress
-        const currentRotation = meshRef.current.rotation.x
-        
-        if (isFlipping) {
-          // During flip - fast movement with spring
-          const springFactor = 0.3
-          const velocity = (targetRotation - currentRotation) * springFactor
-          meshRef.current.rotation.x += velocity
-          
-          // Add overshoot when approaching target
-          if (targetRotation >= Math.PI * 0.8) {
-            const overshoot = Math.sin(state.clock.elapsedTime * 30) * 0.15
-            meshRef.current.rotation.x = targetRotation + overshoot
+      // Handle flip animation
+      if (isFlipping) {
+        const flipSpeed = 20.0 // Much faster flip animation
+        setFlipProgress(prev => {
+          const newProgress = prev + delta * flipSpeed
+          if (newProgress >= Math.PI) {
+            setIsFlipping(false)
+            return Math.PI
           }
-      } else {
-          // After flip - spring oscillation to settle
-          const springConstant = 0.4
-          const damping = 0.85
-          const target = Math.PI
-          const error = target - currentRotation
-          
-          // Spring physics with less damping for faster settling
-          const acceleration = error * springConstant
-          const velocity = (meshRef.current.rotation.x - (meshRef.current as any).lastRotation || 0) * damping
-          meshRef.current.rotation.x += velocity + acceleration * delta * 15
-          
-          // Store last rotation for velocity calculation
-          ;(meshRef.current as any).lastRotation = meshRef.current.rotation.x
-          
-          // Stop oscillation when close enough
-          if (Math.abs(error) < 0.02) {
-            meshRef.current.rotation.x = Math.PI
-            ;(meshRef.current as any).lastRotation = Math.PI
-          }
-        }
+          return newProgress
+        })
       }
 
-              // Handle falling animation
-              if (isFalling) {
-                setFallProgress(prev => {
-                  const newProgress = prev + delta * 2 // Fall speed
-                  if (newProgress >= 1) {
-                    return 1
-                  }
-                  return newProgress
-                })
-                
-                // Apply falling motion with gravity
-                const gravity = fallProgress * fallProgress // Quadratic fall
-                meshRef.current.position.y = position[1] + (fallDistance * gravity)
-                
-                // Add some rotation during fall
-                meshRef.current.rotation.z += delta * 2
-                meshRef.current.rotation.x += delta * 1.5
-              }
-              // Handle hover animation (only when not revealed and not flipping and not falling)
-              else if (hovered && gameStatus === 'playing' && cellState && !cellState.isRevealed && !isFlipping && !isFalling) {
-                meshRef.current.position.y = Math.sin(state.clock.elapsedTime * 5) * 0.02
-              } else if (!isFlipping && !isFalling) {
-                meshRef.current.position.y = 0
-              }
+      // Apply flip rotation (simplified for performance)
+      if (isFlipping || flipProgress > 0) {
+        meshRef.current.rotation.x = flipProgress
+      }
+
+      // Handle falling animation
+      if (isFalling) {
+        setGameOverFallProgress(prev => {
+          const newProgress = prev + delta * 2 // Fall speed
+          if (newProgress >= 1) {
+            return 1
+          }
+          return newProgress
+        })
+
+        // Apply falling motion with gravity
+        const gravity = gameOverFallProgress * gameOverFallProgress // Quadratic fall
+        meshRef.current.position.y = position[1] + (fallDistance * gravity)
+
+        // Add some rotation during fall
+        meshRef.current.rotation.z += delta * 2
+        meshRef.current.rotation.x += delta * 1.5
+      }
     }
   })
 
@@ -312,50 +314,66 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       <mesh
         ref={meshRef}
         geometry={hexGeometry}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
+        onPointerOver={() => {
+          setHovered(true)
+          setHoveredTile(pillarKey)
+        }}
+        onPointerOut={() => {
+          setHovered(false)
+          setHoveredTile(null)
+        }}
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
+        onPointerMove={(e) => {
+          // Ensure hover state is maintained during mouse movement
+          if (!hovered) {
+            setHovered(true)
+            setHoveredTile(pillarKey)
+          }
+          // Call the original handlePointerMove
+          handlePointerMove(e)
+        }}
         onPointerUp={handlePointerUp}
         castShadow
         receiveShadow
       >
-        <meshStandardMaterial 
+        <meshStandardMaterial
           color={getCellColor()}
           roughness={0.4}
           metalness={0.0}
         />
+        
+        {/* Display mine count as true 3D text */}
+        {cellState?.isRevealed && !cellState.isMine && cellState.neighborMineCount > 0 && (
+          <Text3D
+            position={[
+              debugTextOffset.x, 
+              debugTextOffset.y + (isFalling ? (fallDistance * gameOverFallProgress * gameOverFallProgress) : 0), 
+              0.02 + debugTextOffset.z
+            ]}
+            font="./fonts/helvetiker_bold.typeface.json"
+            size={radius * 0.65}
+            height={radius * 0.05}
+            curveSegments={8}
+            bevelEnabled={true}
+            bevelThickness={radius * 0.01}
+            bevelSize={radius * 0.005}
+            bevelOffset={0}
+            bevelSegments={4}
+            rotation={[
+              debugTextRotation.x + Math.PI + (isFalling ? gameOverFallProgress * 2 : 0), 
+              debugTextRotation.y, 
+              debugTextRotation.z + (isFalling ? gameOverFallProgress * 2 : 0)
+            ]}
+            anchorX="center"
+            anchorY="middle"
+            castShadow={false}
+            receiveShadow={false}
+          >
+            {cellState.neighborMineCount}
+            <meshStandardMaterial color="#ffffff" />
+          </Text3D>
+        )}
       </mesh>
-      
-      {/* Display mine count as true 3D text on the back side of the tile */}
-      {cellState?.isRevealed && !cellState.isMine && cellState.neighborMineCount > 0 && !isFlipping && flipProgress >= Math.PI && (
-        <Text3D
-          position={[
-            debugTextOffset.x, 
-            debugTextOffset.y + (isFalling ? (fallDistance * fallProgress * fallProgress) : 0), 
-            0.02 + debugTextOffset.z
-          ]}
-                  font="./fonts/helvetiker_bold.typeface.json"
-          size={radius * 0.65}
-          height={radius * 0.1}
-          curveSegments={16}
-          bevelEnabled={true}
-          bevelThickness={radius * 0.02}
-          bevelSize={radius * 0.01}
-          bevelOffset={0}
-          bevelSegments={8}
-          rotation={[
-            debugTextRotation.x + (isFalling ? fallProgress * 2 : 0), 
-            debugTextRotation.y, 
-            debugTextRotation.z + (isFalling ? fallProgress * 2 : 0)
-          ]}
-          anchorX="center"
-          anchorY="middle"
-        >
-          {cellState.neighborMineCount}
-          <meshStandardMaterial color="#ffffff" />
-        </Text3D>
-      )}
       
       
       {/* Display mine symbol for revealed mines (only after flip completes and not game over) */}

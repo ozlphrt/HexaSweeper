@@ -89,17 +89,17 @@ A modern, immersive 3D implementation of the classic Minesweeper game built with
 - Modern web browser with WebGL support
 
 ### Installation
-```bash
+   ```bash
 # Clone the repository
 git clone https://github.com/ozlphrt/minesweeper-3d.git
 cd minesweeper-3d
 
 # Install dependencies
-npm install
+   npm install
 
 # Start development server
-npm run dev
-```
+   npm run dev
+   ```
 
 ### Building for Production
 ```bash

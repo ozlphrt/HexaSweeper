@@ -74,7 +74,7 @@ export default function Scene() {
       
       {/* Green base/ground plane */}
       <mesh 
-        position={[0, -0.1, 0]} 
+        position={[0, -0.3, 0]} 
         rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow
       >

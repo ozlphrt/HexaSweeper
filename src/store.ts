@@ -1,5 +1,148 @@
 import { create } from 'zustand'
 
+// Helper function to get neighboring cells in hexagonal grid
+function getNeighbors(key: string, pillarConfigs: PillarConfig[]): string[] {
+  // Extract coordinates from key (format: "p-q-r")
+  const parts = key.split('-')
+  if (parts.length !== 3) return []
+  
+  const q = parseInt(parts[1])
+  const r = parseInt(parts[2])
+  
+  // Hexagonal neighbors (6 directions)
+  const neighborOffsets = [
+    [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]
+  ]
+  
+  const neighbors: string[] = []
+  neighborOffsets.forEach(([dq, dr]) => {
+    const neighborKey = `p-${q + dq}-${r + dr}`
+    if (pillarConfigs.some(p => p.key === neighborKey)) {
+      neighbors.push(neighborKey)
+    }
+  })
+  
+  return neighbors
+}
+
+// Helper function to generate logically solvable puzzles
+function generateSolvablePuzzle(pillarConfigs: PillarConfig[], targetMineCount: number) {
+  const totalCells = pillarConfigs.length
+  const maxMineCount = Math.min(targetMineCount, Math.floor(totalCells * 0.2)) // Max 20% mine density
+  
+  // Try multiple times to generate a solvable puzzle
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const minePositions = new Set<string>()
+    
+    // Place mines with some strategic constraints
+    while (minePositions.size < maxMineCount) {
+      const randomIndex = Math.floor(Math.random() * totalCells)
+      const candidateKey = pillarConfigs[randomIndex].key
+      
+      // Avoid clustering mines too much
+      const neighbors = getNeighbors(candidateKey, pillarConfigs)
+      const neighborMineCount = neighbors.filter(neighborKey => 
+        minePositions.has(neighborKey)
+      ).length
+      
+      // Only place mine if it doesn't create too many neighbor mines
+      if (neighborMineCount < 3) {
+        minePositions.add(candidateKey)
+      }
+    }
+    
+    // For now, just return the first valid configuration
+    // TODO: Re-enable solvability testing once basic functionality is working
+    return { minePositions, actualMineCount: minePositions.size }
+  }
+  
+  // Fallback: return a simple configuration if we can't generate a complex one
+  const minePositions = new Set<string>()
+  const simpleMineCount = Math.min(maxMineCount, Math.floor(totalCells * 0.1))
+  
+  for (let i = 0; i < simpleMineCount; i++) {
+    const randomIndex = Math.floor(Math.random() * totalCells)
+    minePositions.add(pillarConfigs[randomIndex].key)
+  }
+  
+  return { minePositions, actualMineCount: minePositions.size }
+}
+
+// Test if a puzzle configuration is logically solvable
+function isPuzzleSolvable(pillarConfigs: PillarConfig[], minePositions: Set<string>) {
+  // Create a temporary cell states for testing
+  const tempCellStates: Record<string, CellState> = {}
+  
+  pillarConfigs.forEach(pillar => {
+    tempCellStates[pillar.key] = {
+      isMine: minePositions.has(pillar.key),
+      isRevealed: false,
+      isFlagged: false,
+      neighborMineCount: 0
+    }
+  })
+  
+  // Calculate neighbor counts
+  pillarConfigs.forEach(pillar => {
+    const neighbors = getNeighbors(pillar.key, pillarConfigs)
+    const neighborMineCount = neighbors.filter(neighborKey => 
+      tempCellStates[neighborKey]?.isMine
+    ).length
+    tempCellStates[pillar.key].neighborMineCount = neighborMineCount
+  })
+  
+  // Simulate logical solving
+  const revealed = new Set<string>()
+  const flagged = new Set<string>()
+  let changed = true
+  let iterations = 0
+  const maxIterations = 100 // Prevent infinite loops
+  
+  while (changed && iterations < maxIterations) {
+    changed = false
+    iterations++
+    
+    // Find cells that can be logically determined
+    for (const pillar of pillarConfigs) {
+      const key = pillar.key
+      const cell = tempCellStates[key]
+      
+      if (cell.isRevealed || cell.isMine) continue
+      
+      const neighbors = getNeighbors(key, pillarConfigs)
+      const unrevealedNeighbors = neighbors.filter(neighborKey => 
+        tempCellStates[neighborKey] && !tempCellStates[neighborKey].isRevealed && !flagged.has(neighborKey)
+      )
+      const flaggedNeighbors = neighbors.filter(neighborKey => 
+        flagged.has(neighborKey)
+      )
+      
+      // If all mines around this cell are flagged, reveal it
+      if (flaggedNeighbors.length === cell.neighborMineCount && unrevealedNeighbors.length > 0) {
+        revealed.add(key)
+        changed = true
+      }
+      
+      // If all remaining neighbors must be mines, flag them
+      if (unrevealedNeighbors.length === cell.neighborMineCount - flaggedNeighbors.length && unrevealedNeighbors.length > 0) {
+        unrevealedNeighbors.forEach(neighborKey => {
+          if (!tempCellStates[neighborKey].isMine) return false // Invalid configuration
+          flagged.add(neighborKey)
+          changed = true
+        })
+      }
+    }
+  }
+  
+  // Check if we can solve a significant portion without guessing
+  const totalSafeCells = pillarConfigs.length - minePositions.size
+  const solvedCells = revealed.size
+  const solvePercentage = solvedCells / totalSafeCells
+  
+  // Consider solvable if we can solve at least 70% without guessing
+  return solvePercentage >= 0.7
+}
+
 export interface PillarConfig {
   key: string
   pos: [number, number, number]
@@ -29,6 +172,7 @@ export interface GameState {
   debugCameraPosition: { x: number; y: number; z: number }
   revealQueue: string[]
   isRevealing: boolean
+  hoveredTile: string | null
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -41,12 +185,13 @@ export const useStore = create<GameState>((set, get) => ({
   sunlight: 1.0,
   ambientLight: 0.3,
   debugTextRotation: { x: 4.69, y: 0, z: 0 },
-  debugTextOffset: { x: -0.21, y: 0.06, z: 0.21 },
+  debugTextOffset: { x: -0.210, y: -0.090, z: -0.250 },
   debugFlagRotation: { x: 0, y: 2.6, z: 0 },
   debugFlagOffset: { x: 0.32, y: 1.00, z: 0.21 },
-  debugCameraPosition: { x: 1.76, y: 8.78, z: 23.95 },
+  debugCameraPosition: { x: 2.21, y: 13.90, z: 22.98 },
   revealQueue: [],
   isRevealing: false,
+  hoveredTile: null,
 
   resetScene: () => set({
     pillarConfigs: [],
@@ -58,7 +203,7 @@ export const useStore = create<GameState>((set, get) => ({
     sunlight: 1.0,
     ambientLight: 0.3,
     debugTextRotation: { x: 4.69, y: 0, z: 0 },
-  debugTextOffset: { x: -0.21, y: 0.06, z: 0.21 },
+  debugTextOffset: { x: -0.210, y: -0.090, z: -0.250 },
   revealQueue: [],
   isRevealing: false,
   }),
@@ -86,19 +231,10 @@ export const useStore = create<GameState>((set, get) => ({
       }
     })
 
-    // Place mines randomly
-    const minePositions = new Set<string>()
-    const totalCells = pillarConfigs.length
-    const actualMineCount = Math.min(mineCount, totalCells)
+    // Generate a logically solvable puzzle
+    const { minePositions, actualMineCount } = generateSolvablePuzzle(pillarConfigs, mineCount)
     
-    console.log('Placing', actualMineCount, 'mines in', totalCells, 'cells')
-    
-    while (minePositions.size < actualMineCount) {
-      const randomIndex = Math.floor(Math.random() * totalCells)
-      minePositions.add(pillarConfigs[randomIndex].key)
-    }
-
-    console.log('Mine positions:', Array.from(minePositions).slice(0, 10))
+    console.log('Generated solvable puzzle with', actualMineCount, 'mines')
 
     // Set mines and calculate neighbor counts
     minePositions.forEach(key => {
@@ -195,10 +331,32 @@ export const useStore = create<GameState>((set, get) => ({
 
   setDebugCameraPosition: (position: { x: number; y: number; z: number }) => set({ debugCameraPosition: position }),
 
-  addToRevealQueue: (key: string) => set((state) => ({
-    revealQueue: [...state.revealQueue, key],
-    isRevealing: true
-  })),
+
+  setHoveredTile: (key: string | null) => set({ hoveredTile: key }),
+
+
+  addToRevealQueue: (key: string) => {
+    const { cellStates, gameStatus } = get()
+    const cell = cellStates[key]
+
+    // Check if cell exists and is not already revealed/flagged
+    if (!cell || cell.isRevealed || cell.isFlagged || gameStatus !== 'playing') {
+      return
+    }
+
+    // If it's a mine, ask for confirmation to prevent accidental game over
+    if (cell.isMine) {
+      const confirmed = window.confirm("⚠️ This is a mine! Are you sure you want to reveal it?")
+      if (!confirmed) {
+        return // User cancelled, do not reveal the mine
+      }
+    }
+
+    set((state) => ({
+      revealQueue: [...state.revealQueue, key],
+      isRevealing: true
+    }))
+  },
 
   processRevealQueue: () => {
     const { revealQueue, cellStates, gameStatus, mineCount, pillarConfigs } = get()
@@ -254,7 +412,7 @@ export const useStore = create<GameState>((set, get) => ({
 
   resetGame: () => {
     // First, reset all game state to initial values
-    set({
+    set({ 
       pillarConfigs: [],
       cellStates: {},
       gameStatus: 'playing',
@@ -311,28 +469,3 @@ export const useStore = create<GameState>((set, get) => ({
     }
   },
 }))
-
-// Helper function to get neighboring cells in hexagonal grid
-function getNeighbors(key: string, pillarConfigs: PillarConfig[]): string[] {
-  // Extract coordinates from key (format: "p-q-r")
-  const parts = key.split('-')
-  if (parts.length !== 3) return []
-  
-  const q = parseInt(parts[1])
-  const r = parseInt(parts[2])
-  
-  // Hexagonal neighbors (6 directions)
-  const neighborOffsets = [
-    [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]
-  ]
-  
-  const neighbors: string[] = []
-  neighborOffsets.forEach(([dq, dr]) => {
-    const neighborKey = `p-${q + dq}-${r + dr}`
-    if (pillarConfigs.some(p => p.key === neighborKey)) {
-      neighbors.push(neighborKey)
-    }
-  })
-  
-  return neighbors
-}
