@@ -2,6 +2,7 @@ import React, { useRef, useState, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Text, Text3D, useGLTF, useAnimations } from '@react-three/drei'
 import * as THREE from 'three'
+
 import { useStore } from './store'
 import { soundManager } from './SoundManager'
 
@@ -43,6 +44,15 @@ function Flag({ position, scale = 1 }: { position: [number, number, number], sca
   // Create a unique instance for this flag
   const flagInstance = React.useMemo(() => {
     const instance = scene.clone()
+    
+    // Enable shadows for all meshes in the flag
+    instance.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+    
     // Ensure the instance has its own animation mixer
     if (animations && animations.length > 0) {
       const mixer = new THREE.AnimationMixer(instance)
@@ -72,8 +82,9 @@ function Flag({ position, scale = 1 }: { position: [number, number, number], sca
       ]} 
       rotation={[debugFlagRotation.x, debugFlagRotation.y, debugFlagRotation.z]}
       scale={scale}
+      castShadow
     >
-      <primitive object={flagInstance} />
+      <primitive object={flagInstance} castShadow />
     </group>
   )
 }
@@ -89,10 +100,20 @@ type Props = {
 export function Pillar({ position, height, radius, allPillars, pillarKey }: Props) {
   const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
+  
   const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset, hoveredTile, setHoveredTile } = useStore()
   
-  const segmentHeight = 0.2
   const cellState = cellStates[pillarKey]
+  
+  // Calculate tile thickness for positioning elements
+  const getTileThickness = () => {
+    const baseThickness = 0.15
+    const thicknessVariation = 0.08
+    const randomSeed = pillarKey.split('-').reduce((acc, val) => acc + val.charCodeAt(0), 0)
+    const randomFactor = Math.sin(randomSeed * 0.1) * 0.5 + 0.5
+    const positionFactor = Math.sin(position[0] * 0.3) * Math.cos(position[2] * 0.4)
+    return baseThickness + (positionFactor * randomFactor * thicknessVariation)
+  }
   
 
   
@@ -119,7 +140,15 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   
   // Create hexagonal geometry with chamfered edges
   const hexGeometry = useMemo(() => {
-    const geometry = new THREE.CylinderGeometry(radius, radius, segmentHeight, 6, 1, false)
+    // Calculate thickness here to ensure it's included in the memoization
+    const baseThickness = 0.15
+    const thicknessVariation = 0.08
+    const randomSeed = pillarKey.split('-').reduce((acc, val) => acc + val.charCodeAt(0), 0)
+    const randomFactor = Math.sin(randomSeed * 0.1) * 0.5 + 0.5 // 0 to 1
+    const positionFactor = Math.sin(position[0] * 0.3) * Math.cos(position[2] * 0.4)
+    const calculatedThickness = baseThickness + (positionFactor * randomFactor * thicknessVariation)
+    
+    const geometry = new THREE.CylinderGeometry(radius, radius, calculatedThickness, 6, 1, false)
     
     // Add subtle chamfer to edges
     const positionAttribute = geometry.getAttribute('position')
@@ -338,7 +367,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       >
         <meshStandardMaterial
           color={getCellColor()}
-          roughness={0.4}
+          roughness={0.3}
           metalness={0.0}
         />
         
@@ -351,14 +380,10 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
               0.02 + debugTextOffset.z
             ]}
             font="./fonts/helvetiker_bold.typeface.json"
-            size={radius * 0.65}
-            height={radius * 0.05}
-            curveSegments={8}
-            bevelEnabled={true}
-            bevelThickness={radius * 0.01}
-            bevelSize={radius * 0.005}
-            bevelOffset={0}
-            bevelSegments={4}
+            size={radius * 0.6}
+            height={radius * 0.01}
+            curveSegments={2}
+            bevelEnabled={false}
             rotation={[
               debugTextRotation.x + Math.PI + (isFalling ? gameOverFallProgress * 2 : 0), 
               debugTextRotation.y, 
@@ -378,7 +403,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       
       {/* Display mine symbol for revealed mines (only after flip completes and not game over) */}
       {cellState?.isRevealed && cellState.isMine && !isFlipping && flipProgress >= Math.PI && gameStatus === 'playing' && (
-        <mesh position={[0, segmentHeight / 2 + 0.01, 0]}>
+        <mesh position={[0, getTileThickness() / 2 + 0.01, 0]}>
           <planeGeometry args={[radius * 0.6, radius * 0.6]} />
           <meshBasicMaterial color="#e74c3c" transparent opacity={0.9} />
         </mesh>
@@ -388,7 +413,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
               {cellState?.isFlagged && (
                 <Flag 
                   key={`flag-${pillarKey}`}
-                  position={[0, segmentHeight / 2 + 0.1, 0]} 
+                  position={[0, getTileThickness() / 2 + 0.2, 0]} 
                   scale={radius * 1.5}
                 />
               )}

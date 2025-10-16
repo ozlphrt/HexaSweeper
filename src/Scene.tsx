@@ -48,28 +48,44 @@ export default function Scene() {
       {/* Atmospheric fog */}
       <fog attach="fog" args={['#2c3e50', 40, 100]} />
       
-      {/* Key Light - Main directional light */}
+      {/* Key Light - Main directional light positioned front left of camera */}
       <directionalLight
-        position={[10, 20, 10]}
+        position={[10, 15, -10]}
         intensity={sunlight}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
         shadow-camera-far={50}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
+        shadow-camera-left={-25}
+        shadow-camera-right={25}
+        shadow-camera-top={25}
+        shadow-camera-bottom={-25}
+        shadow-bias={-0.0001}
       />
       
-      {/* Fill Light - Softer ambient light */}
-      <ambientLight intensity={ambientLight} />
       
-      {/* Rim Light - Subtle backlighting */}
+      {/* Fill Light - Softer ambient light */}
+      <ambientLight intensity={0.2} />
+      
+      {/* Key Fill Light - Front left to balance the main sunlight */}
       <directionalLight
-        position={[-10, 10, -10]}
-        intensity={0.3}
+        position={[-8, 12, 8]}
+        intensity={0.4}
+        color="#ffffff"
+      />
+      
+      {/* Rim Light - Back left for edge lighting */}
+      <directionalLight
+        position={[-12, 8, -8]}
+        intensity={0.25}
         color="#4a90e2"
+      />
+      
+      {/* Accent Light - Top center for overall illumination */}
+      <directionalLight
+        position={[0, 20, 0]}
+        intensity={0.3}
+        color="#ffffff"
       />
       
       {/* Green base/ground plane */}

@@ -48,6 +48,41 @@ class SoundManager {
       console.warn('Could not play click sound:', error)
     }
   }
+
+  playVictory() {
+    if (!this.audioContext) return
+
+    try {
+      const sampleRate = this.audioContext.sampleRate
+      const duration = 1.5 // 1.5 seconds
+      const buffer = this.audioContext.createBuffer(1, sampleRate * duration, sampleRate)
+      const data = buffer.getChannelData(0)
+
+      // Generate a victory fanfare sound
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sampleRate
+        const envelope = Math.exp(-t * 2) // Gradual decay
+        
+        // Create a rising melody
+        const note1 = Math.sin(2 * Math.PI * 523.25 * t) * 0.3 // C5
+        const note2 = Math.sin(2 * Math.PI * 659.25 * t) * 0.3 // E5
+        const note3 = Math.sin(2 * Math.PI * 783.99 * t) * 0.3 // G5
+        
+        // Add some harmonics for richness
+        const harmonic1 = Math.sin(2 * Math.PI * 523.25 * 2 * t) * 0.1
+        const harmonic2 = Math.sin(2 * Math.PI * 659.25 * 2 * t) * 0.1
+        
+        data[i] = (note1 + note2 + note3 + harmonic1 + harmonic2) * envelope * 0.15
+      }
+
+      const source = this.audioContext.createBufferSource()
+      source.buffer = buffer
+      source.connect(this.audioContext.destination)
+      source.start()
+    } catch (error) {
+      console.warn('Could not play victory sound:', error)
+    }
+  }
 }
 
 // Export singleton instance
