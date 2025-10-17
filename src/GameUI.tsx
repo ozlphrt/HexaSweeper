@@ -26,7 +26,7 @@ export function GameUI() {
       case 'won':
         return `🎉 You won in ${elapsedTime}s!`
       case 'lost':
-        return '💥 Game Over!'
+        return 'Find all the mines!'
       default:
         return ''
     }

@@ -5,6 +5,8 @@ import Scene from './Scene'
 import { FpsCounter } from './FpsCounter'
 import { useStore } from './store'
 import { soundManager } from './SoundManager'
+import { DebugPanel } from './DebugPanel'
+import { CameraTracker } from './CameraTracker'
 
 import * as THREE from 'three'
 
@@ -341,15 +343,18 @@ function LightingDebugControls({ onLightChange }: { onLightChange: (rimLight1: a
 // Component to set initial camera position
 function CameraInitializer() {
   const controlsRef = useRef<any>(null)
+  const { debugCameraPosition } = useStore()
+  const initialized = useRef(false)
   
   useEffect(() => {
-    if (controlsRef.current) {
-      // Set camera to our preferred position
-      controlsRef.current.object.position.set(2.21, 13.90, 22.98)
+    if (controlsRef.current && !initialized.current) {
+      // Set camera to our preferred position from store (only once)
+      controlsRef.current.object.position.set(debugCameraPosition.x, debugCameraPosition.y, debugCameraPosition.z)
       controlsRef.current.target.set(0, 0, 0)
       controlsRef.current.update()
+      initialized.current = true
     }
-  }, [])
+  }, [debugCameraPosition])
 
   return (
     <OrbitControls
@@ -372,8 +377,10 @@ function CameraInitializer() {
       zoomSpeed={1.0}
       dollySpeed={1.0}
       enableDamping={true}
-      dampingFactor={0.05}
+      dampingFactor={0.035}
       enableSmoothZoom={true}
+      autoRotate={false}
+      autoRotateSpeed={0}
     />
   )
 }
@@ -436,6 +443,7 @@ function GameUI() {
 
 
 
+
 export default function App() {
   const { isRevealing, processRevealQueue, resetGame, audioEnabled } = useStore()
   
@@ -476,16 +484,18 @@ export default function App() {
       <Canvas
         shadows
         dpr={[1, 2]}
-        camera={{ position: [2.21, 13.90, 22.98], fov: 45, near: 0.1, far: 200 }}
+        camera={{ position: [8.7, 9.8, 24], fov: 45, near: 0.1, far: 200 }}
       >
         <color attach="background" args={['#2c3e50']} />
         <Scene />
         <CameraInitializer />
+        <CameraTracker />
         <Celebration />
       </Canvas>
       
       <FpsCounter />
       <GameUI />
+      <DebugPanel />
       
       <div className="credits">
         Hexagrid Minesweeper

@@ -37,7 +37,7 @@ function getNeighbors(key: string, pillarConfigs: { key: string, pos: [number, n
 
 
 // Flag component for 3D flag models
-function Flag({ position, scale = 1 }: { position: [number, number, number], scale?: number }) {
+function Flag({ position, scale = 1, color = "#ff6b6b" }: { position: [number, number, number], scale?: number, color?: string }) {
   const { scene, animations } = useGLTF('/low_poly_golf_flag_animated/scene.gltf')
   const { debugFlagRotation, debugFlagOffset } = useStore()
   const groupRef = useRef<THREE.Group>(null)
@@ -46,11 +46,29 @@ function Flag({ position, scale = 1 }: { position: [number, number, number], sca
   const flagInstance = React.useMemo(() => {
     const instance = scene.clone()
     
-    // Enable shadows for all meshes in the flag
+    // Enable shadows and apply color to all meshes in the flag
     instance.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true
         child.receiveShadow = true
+        // Apply the color to the flag material
+        if (child.material) {
+          child.material = child.material.clone()
+          
+          // Check if this is the pole (usually named differently or has different geometry)
+          // For now, we'll use a simple heuristic: if the mesh is tall and thin, it's likely the pole
+          const boundingBox = new THREE.Box3().setFromObject(child)
+          const size = boundingBox.getSize(new THREE.Vector3())
+          const isPole = size.y > size.x && size.y > size.z && size.y > 0.5
+          
+          if (isPole) {
+            // Make the pole white (same as white tiles)
+            child.material.color.set("#ffffff")
+          } else {
+            // Make the flag red
+            child.material.color.set(color)
+          }
+        }
       }
     })
     
@@ -64,10 +82,15 @@ function Flag({ position, scale = 1 }: { position: [number, number, number], sca
       ;(instance as any).mixer = mixer
     }
     return instance
-  }, [scene, animations])
+  }, [scene, animations, color])
   
-  // Update animation mixer on each frame
+  // Update animation mixer on each frame (throttled)
+  const lastAnimationUpdate = useRef(0)
   useFrame((state, delta) => {
+    const now = performance.now()
+    if (now - lastAnimationUpdate.current < 16) return // ~60fps max
+    lastAnimationUpdate.current = now
+    
     if (flagInstance && (flagInstance as any).mixer) {
       ;(flagInstance as any).mixer.update(delta)
     }
@@ -102,7 +125,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
   
-  const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset, debugTextScale, hoveredTile, setHoveredTile, gameResetTrigger } = useStore()
+  const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset, debugTextScale, hoveredTile, setHoveredTile, gameResetTrigger, immortalMode } = useStore()
   
   const cellState = cellStates[pillarKey]
   
@@ -123,7 +146,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   // Click vs drag detection
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null)
-  const dragThreshold = 5 // pixels
+  const dragThreshold = 3 // pixels - reduced for better responsiveness
 
   
   // Animation state - simplified for performance
@@ -214,8 +237,15 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
     }
   }
   
+  const lastClickTime = useRef(0)
+  
   const handlePointerUp = (event: any) => {
     if (!isDragging && dragStartPos) {
+      // Throttle clicks to prevent multiple rapid clicks
+      const now = performance.now()
+      if (now - lastClickTime.current < 200) return // 200ms cooldown
+      lastClickTime.current = now
+      
       // It's a click, not a drag
       if (event.button === 0) { // Left click
         event.stopPropagation()
@@ -270,10 +300,18 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
     }
 
     // Normal state (not flipping)
-    if (cellState.isFlagged) return "#ff6b6b" // Red for flagged
     if (cellState.isRevealed) {
-      if (cellState.isMine) return "#2c3e50" // Dark blue for mine
+      if (cellState.isMine) {
+        // In immortal mode, show black for clicked mines (prioritize over flagged)
+        if (immortalMode && cellState.isImmortalMine) {
+          return "#000000" // Black for immortal mine
+        }
+        return "#2c3e50" // Dark blue for regular mine
+      }
       return "#27ae60" // Green for revealed safe cells
+    }
+    if (cellState.isFlagged) {
+      return "#ff6b6b" // Red for all flagged tiles
     }
 
     return "#f4efe8" // Creamy white for unrevealed
@@ -430,6 +468,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
                   key={`flag-${pillarKey}`}
                   position={[0, getTileThickness() / 2 + 0.2, 0]} 
                   scale={radius * 1.5}
+                  color={getCellColor()}
                 />
               )}
     </group>

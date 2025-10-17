@@ -78,7 +78,8 @@ function isPuzzleSolvable(pillarConfigs: PillarConfig[], minePositions: Set<stri
       isMine: minePositions.has(pillar.key),
       isRevealed: false,
       isFlagged: false,
-      neighborMineCount: 0
+      neighborMineCount: 0,
+      isImmortalMine: false
     }
   })
   
@@ -154,6 +155,7 @@ export interface CellState {
   isRevealed: boolean
   isFlagged: boolean
   neighborMineCount: number
+  isImmortalMine?: boolean
 }
 
 export interface GameState {
@@ -171,11 +173,14 @@ export interface GameState {
   debugFlagRotation: { x: number; y: number; z: number }
   debugFlagOffset: { x: number; y: number; z: number }
   debugCameraPosition: { x: number; y: number; z: number }
+  debugCameraTarget: { x: number; y: number; z: number }
+  debugCameraDirection: { x: number; y: number; z: number }
   revealQueue: string[]
   isRevealing: boolean
   hoveredTile: string | null
   gameResetTrigger: number
   audioEnabled: boolean
+  immortalMode: boolean
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -192,12 +197,15 @@ export const useStore = create<GameState>((set, get) => ({
   debugTextScale: 0.720,
   debugFlagRotation: { x: 0, y: 2.6, z: 0 },
   debugFlagOffset: { x: 0.32, y: 1.00, z: 0.21 },
-  debugCameraPosition: { x: 2.21, y: 13.90, z: 22.98 },
+  debugCameraPosition: { x: 8.7, y: 9.8, z: 24 },
+  debugCameraTarget: { x: 0, y: 0, z: 0 },
+  debugCameraDirection: { x: 0, y: 0, z: 0 },
   revealQueue: [],
   isRevealing: false,
   hoveredTile: null,
-  gameResetTrigger: 0,
-  audioEnabled: true,
+    gameResetTrigger: 0,
+    audioEnabled: true,
+    immortalMode: false,
 
   resetScene: () => set({
     pillarConfigs: [],
@@ -234,7 +242,8 @@ export const useStore = create<GameState>((set, get) => ({
         isMine: false,
         isRevealed: false,
         isFlagged: false,
-        neighborMineCount: 0
+        neighborMineCount: 0,
+        isImmortalMine: false
       }
     })
 
@@ -283,8 +292,20 @@ export const useStore = create<GameState>((set, get) => ({
 
     // Check if it's a mine
     if (cell.isMine) {
-      set({ gameStatus: 'lost' })
-      return
+      const { immortalMode } = get()
+      if (immortalMode) {
+        // In immortal mode, just flag the mine and continue
+        set((state) => ({
+          cellStates: {
+            ...state.cellStates,
+            [key]: { ...cell, isRevealed: true, isFlagged: true, isImmortalMine: true }
+          }
+        }))
+        return
+      } else {
+        set({ gameStatus: 'lost' })
+        return
+      }
     }
 
     // If no neighboring mines, reveal neighbors
@@ -316,7 +337,7 @@ export const useStore = create<GameState>((set, get) => ({
     set((state) => ({
       cellStates: {
         ...state.cellStates,
-        [key]: { ...cell, isFlagged: newFlagged }
+        [key]: { ...cell, isFlagged: newFlagged, isImmortalMine: cell.isImmortalMine }
       },
       flagCount: state.flagCount + flagDelta
     }))
@@ -340,9 +361,19 @@ export const useStore = create<GameState>((set, get) => ({
 
   setDebugCameraPosition: (position: { x: number; y: number; z: number }) => set({ debugCameraPosition: position }),
 
+  setDebugCameraTarget: (target: { x: number; y: number; z: number }) => set({ debugCameraTarget: target }),
+
+  setDebugCameraDirection: (direction: { x: number; y: number; z: number }) => set({ debugCameraDirection: direction }),
+
   setHoveredTile: (key: string | null) => set({ hoveredTile: key }),
 
   toggleAudio: () => set((state) => ({ audioEnabled: !state.audioEnabled })),
+
+  setImmortalMode: (immortal: boolean) => {
+    console.log('Setting immortalMode to:', immortal)
+    set({ immortalMode: immortal })
+  },
+
 
 
   addToRevealQueue: (key: string) => {
@@ -354,13 +385,6 @@ export const useStore = create<GameState>((set, get) => ({
       return
     }
 
-    // If it's a mine, ask for confirmation to prevent accidental game over
-    if (cell.isMine) {
-      const confirmed = window.confirm("⚠️ This is a mine! Are you sure you want to reveal it?")
-      if (!confirmed) {
-        return // User cancelled, do not reveal the mine
-      }
-    }
 
     set((state) => ({
       revealQueue: [...state.revealQueue, key],
@@ -387,12 +411,22 @@ export const useStore = create<GameState>((set, get) => ({
     const cell = newCellStates[key]
 
     if (cell.isMine) {
-      // Game over - reveal all mines
-      Object.values(newCellStates).forEach(c => {
-        if (c.isMine) c.isRevealed = true
-      })
-      set({ cellStates: newCellStates, gameStatus: 'lost', revealQueue: [], isRevealing: false })
-      return
+      const { immortalMode } = get()
+      if (immortalMode) {
+        // In immortal mode, just flag this mine and continue
+        cell.isRevealed = true
+        cell.isFlagged = true
+        cell.isImmortalMine = true
+        set({ cellStates: newCellStates, revealQueue: newQueue })
+        return
+      } else {
+        // Game over - reveal all mines
+        Object.values(newCellStates).forEach(c => {
+          if (c.isMine) c.isRevealed = true
+        })
+        set({ cellStates: newCellStates, gameStatus: 'lost', revealQueue: [], isRevealing: false })
+        return
+      }
     }
 
     // Reveal this cell

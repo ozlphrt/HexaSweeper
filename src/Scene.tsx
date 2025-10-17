@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import { useThree } from '@react-three/fiber'
 import { HexGrid } from './HexGrid'
 import { useStore } from './store'
@@ -14,34 +14,44 @@ export default function Scene() {
     setCameraTarget 
   } = useStore()
   
-  // Auto-focus camera on the hexgrid
+  // Auto-focus camera on the hexgrid (only if no cameraRigTarget is set)
   React.useEffect(() => {
     if (!cameraRigTarget) {
-      // Position camera to view the entire 30x30 hexgrid
-      const distance = 25 // Adjust for 30x30 grid
-      camera.position.set(distance * 0.7, distance * 0.8, distance * 0.7)
-      camera.lookAt(0, 0, 0)
+      // Only set initial position if camera is at default position
+      const defaultPos = new THREE.Vector3(0, 0, 0)
+      if (camera.position.distanceTo(defaultPos) < 0.1) {
+        // Position camera to view the entire 30x30 hexgrid
+        const distance = 25 // Adjust for 30x30 grid
+        camera.position.set(distance * 0.7, distance * 0.8, distance * 0.7)
+        camera.lookAt(0, 0, 0)
+      }
     }
   }, [camera, cameraRigTarget])
   
-  // Smooth camera movement to target
-  useFrame((state, delta) => {
-    if (cameraRigTarget) {
-      const targetPosition = new THREE.Vector3(
-        cameraRigTarget[0] + 3,
-        cameraRigTarget[1] + 5,
-        cameraRigTarget[2] + 3
-      )
-      
-      camera.position.lerp(targetPosition, delta * 2)
-      camera.lookAt(cameraRigTarget[0], cameraRigTarget[1], cameraRigTarget[2])
-      
-      // Clear target after reaching it
-      if (camera.position.distanceTo(targetPosition) < 0.1) {
-        setCameraTarget(null)
-      }
-    }
-  })
+  const lastCameraUpdate = useRef(0)
+  
+  // Disabled automatic camera movement to allow free panning
+  // useFrame((state, delta) => {
+  //   const now = performance.now()
+  //   if (now - lastCameraUpdate.current < 16) return // ~60fps max
+  //   lastCameraUpdate.current = now
+  //   
+  //   if (cameraRigTarget) {
+  //     const targetPosition = new THREE.Vector3(
+  //       cameraRigTarget[0] + 3,
+  //       cameraRigTarget[1] + 5,
+  //       cameraRigTarget[2] + 3
+  //     )
+  //     
+  //     camera.position.lerp(targetPosition, delta * 2)
+  //     camera.lookAt(cameraRigTarget[0], cameraRigTarget[1], cameraRigTarget[2])
+  //     
+  //     // Clear target after reaching it
+  //     if (camera.position.distanceTo(targetPosition) < 0.1) {
+  //       setCameraTarget(null)
+  //     }
+  //   }
+  // })
   
   return (
     <>
@@ -50,7 +60,7 @@ export default function Scene() {
       
       {/* Key Light - Main directional light positioned front left of camera */}
       <directionalLight
-        position={[10, 15, -10]}
+        position={[-10, 15, -10]}
         intensity={sunlight}
         castShadow
         shadow-mapSize-width={4096}
@@ -64,27 +74,41 @@ export default function Scene() {
       />
       
       
-      {/* Fill Light - Softer ambient light */}
-      <ambientLight intensity={0.2} />
+      {/* Fill Light - Soft ambient light for overall illumination */}
+      <ambientLight intensity={0.4} />
       
-      {/* Key Fill Light - Front left to balance the main sunlight */}
+      {/* Key Fill Light - Front right to balance the main sunlight */}
       <directionalLight
-        position={[-8, 12, 8]}
-        intensity={0.4}
-        color="#ffffff"
+        position={[8, 12, -8]}
+        intensity={0.3}
+        color="#f8f8ff"
       />
       
-      {/* Rim Light - Back left for edge lighting */}
+      {/* Rim Light - Back right for edge lighting and depth */}
       <directionalLight
-        position={[-12, 8, -8]}
-        intensity={0.25}
-        color="#4a90e2"
+        position={[12, 8, 8]}
+        intensity={0.2}
+        color="#e6f3ff"
       />
       
       {/* Accent Light - Top center for overall illumination */}
       <directionalLight
         position={[0, 20, 0]}
-        intensity={0.3}
+        intensity={0.25}
+        color="#ffffff"
+      />
+      
+      {/* Side Fill Light - Right side to prevent harsh shadows */}
+      <directionalLight
+        position={[15, 10, 0]}
+        intensity={0.2}
+        color="#f0f8ff"
+      />
+      
+      {/* Flag Illumination Light - Specifically for flag visibility */}
+      <directionalLight
+        position={[0, 5, 0]}
+        intensity={0.5}
         color="#ffffff"
       />
       

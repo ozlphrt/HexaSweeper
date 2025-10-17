@@ -16,6 +16,8 @@
     "@react-three/drei": "^9.88.13",
     "@react-three/fiber": "^8.15.12",
     "@react-three/rapier": "^1.5.0",
+    "@types/dat.gui": "^0.7.13",
+    "dat.gui": "^0.7.9",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.158.0",
