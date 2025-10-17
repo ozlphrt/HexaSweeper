@@ -10,9 +10,18 @@
 - **UI:** Glass-morphism panel with Reset + Sunlight slider
 
 ## Interactions
-- **Click/tap** a pillar → it switches from **fixed** to **dynamic** and falls under gravity
-- Camera **zooms/pans** toward the clicked pillar for a cinematic cue
-- Reset clears focus (soft reset); hard refresh resets bodies
+- **Left Click** → Reveal tile (Minesweeper mechanics)
+- **Right Click** → Flag/unflag tile
+- **Camera Controls** → Orbit, pan, zoom with mouse/touch
+- **R Key** → Reset game and generate new board
+- **New Game Button** → Reset game and generate new board
+
+## Debug Controls
+- **Font Offset Controls** → Real-time adjustment of mine count number positioning
+- **Font Rotation Controls** → Real-time adjustment of mine count number orientation
+- **Flag Controls** → Real-time adjustment of flag model positioning and rotation
+- **Camera Position Display** → Live camera coordinates with copy functionality
+- **Copy Buttons** → Save preferred positioning values to clipboard
 
 ## Tech Stack
 - **React + React Three Fiber (r3f) + drei**

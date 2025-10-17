@@ -5,6 +5,7 @@ import * as THREE from 'three'
 
 import { useStore } from './store'
 import { soundManager } from './SoundManager'
+import { DigitalNumber } from './DigitalNumber'
 
 // Preload the flag GLTF model to prevent first-flag flickering
 useGLTF.preload('/low_poly_golf_flag_animated/scene.gltf')
@@ -101,7 +102,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
   
-  const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset, hoveredTile, setHoveredTile } = useStore()
+  const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset, debugTextScale, hoveredTile, setHoveredTile, gameResetTrigger } = useStore()
   
   const cellState = cellStates[pillarKey]
   
@@ -125,16 +126,27 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   const dragThreshold = 5 // pixels
 
   
-  // Animation state
+  // Animation state - simplified for performance
   const [isFlipping, setIsFlipping] = useState(false)
-  const [flipProgress, setFlipProgress] = useState(0)
   const [wasRevealed, setWasRevealed] = useState(false)
+  const flipStartTime = useRef<number>(0)
+  const flipDuration = 0.3 // 300ms flip duration
   
   // Game over falling animation state
   const [isFalling, setIsFalling] = useState(false)
   const [gameOverFallProgress, setGameOverFallProgress] = useState(0)
   const [gameOverFallDelay, setGameOverFallDelay] = useState(0)
   const fallDistance = -10 // Fall 10 units down
+
+  // Reset all animation states when game is reset
+  React.useEffect(() => {
+    setIsFlipping(false)
+    setWasRevealed(false)
+    setIsFalling(false)
+    setGameOverFallProgress(0)
+    setGameOverFallDelay(0)
+    flipStartTime.current = 0
+  }, [gameResetTrigger])
   
   
   
@@ -239,8 +251,13 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
     }
 
     // During flip animation, show different colors based on flip progress
-    if (isFlipping || flipProgress > 0) {
-      const flipRatio = flipProgress / Math.PI
+    if (isFlipping) {
+      const currentTime = performance.now()
+      const elapsed = (currentTime - flipStartTime.current) / 1000
+      const progress = Math.min(elapsed / flipDuration, 1)
+      const easedProgress = 1 - Math.pow(1 - progress, 3)
+      const flipRatio = easedProgress
+      
       if (flipRatio < 0.5) {
         // First half of flip - show front side (unrevealed)
         if (cellState.isFlagged) return "#ff6b6b" // Red for flagged
@@ -259,7 +276,6 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       return "#27ae60" // Green for revealed safe cells
     }
 
-
     return "#f4efe8" // Creamy white for unrevealed
   }
 
@@ -268,7 +284,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   React.useEffect(() => {
     if (cellState?.isRevealed && !wasRevealed) {
       setIsFlipping(true)
-      setFlipProgress(0)
+      flipStartTime.current = performance.now()
       setWasRevealed(true)
       // Play click sound when flip starts
       soundManager.playClick()
@@ -299,22 +315,20 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       // No press-down effect - tiles stay at original position
       meshRef.current.position.y = position[1]
 
-      // Handle flip animation
+      // Handle flip animation - optimized for performance
       if (isFlipping) {
-        const flipSpeed = 20.0 // Much faster flip animation
-        setFlipProgress(prev => {
-          const newProgress = prev + delta * flipSpeed
-          if (newProgress >= Math.PI) {
-            setIsFlipping(false)
-            return Math.PI
-          }
-          return newProgress
-        })
-      }
-
-      // Apply flip rotation (simplified for performance)
-      if (isFlipping || flipProgress > 0) {
-        meshRef.current.rotation.x = flipProgress
+        const currentTime = performance.now()
+        const elapsed = (currentTime - flipStartTime.current) / 1000 // Convert to seconds
+        const progress = Math.min(elapsed / flipDuration, 1)
+        
+        if (progress >= 1) {
+          setIsFlipping(false)
+          meshRef.current.rotation.x = 0 // Reset rotation
+        } else {
+          // Use easing function for smoother animation
+          const easedProgress = 1 - Math.pow(1 - progress, 3) // Ease-out cubic
+          meshRef.current.rotation.x = easedProgress * Math.PI
+        }
       }
 
       // Handle falling animation
@@ -371,38 +385,39 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
           metalness={0.0}
         />
         
-        {/* Display mine count as true 3D text */}
-        {cellState?.isRevealed && !cellState.isMine && cellState.neighborMineCount > 0 && (
-          <Text3D
-            position={[
-              debugTextOffset.x, 
-              debugTextOffset.y + (isFalling ? (fallDistance * gameOverFallProgress * gameOverFallProgress) : 0), 
-              0.02 + debugTextOffset.z
-            ]}
-            font="./fonts/helvetiker_bold.typeface.json"
-            size={radius * 0.6}
-            height={radius * 0.01}
-            curveSegments={2}
-            bevelEnabled={false}
-            rotation={[
-              debugTextRotation.x + Math.PI + (isFalling ? gameOverFallProgress * 2 : 0), 
-              debugTextRotation.y, 
-              debugTextRotation.z + (isFalling ? gameOverFallProgress * 2 : 0)
-            ]}
-            anchorX="center"
-            anchorY="middle"
-            castShadow={false}
-            receiveShadow={false}
-          >
-            {cellState.neighborMineCount}
-            <meshStandardMaterial color="#ffffff" />
-          </Text3D>
-        )}
       </mesh>
+      
+      {/* Display mine count as 3D text - positioned outside mesh to avoid flip rotation */}
+      {cellState?.isRevealed && !cellState.isMine && cellState.neighborMineCount > 0 && (
+        <Text3D
+          position={[
+            debugTextOffset.x,
+            debugTextOffset.y + (isFalling ? (fallDistance * gameOverFallProgress * gameOverFallProgress) : 0),
+            0.02 + debugTextOffset.z
+          ]}
+          font="./fonts/helvetiker_bold.typeface.json"
+          size={radius * debugTextScale}
+          height={radius * 0.01}
+          curveSegments={2}
+          bevelEnabled={false}
+          rotation={[
+            debugTextRotation.x + (isFalling ? gameOverFallProgress * 2 : 0),
+            debugTextRotation.y,
+            debugTextRotation.z + (isFalling ? gameOverFallProgress * 2 : 0)
+          ]}
+          anchorX="center"
+          anchorY="middle"
+          castShadow={false}
+          receiveShadow={false}
+        >
+          {cellState.neighborMineCount}
+          <meshStandardMaterial color="#ffffff" />
+        </Text3D>
+      )}
       
       
       {/* Display mine symbol for revealed mines (only after flip completes and not game over) */}
-      {cellState?.isRevealed && cellState.isMine && !isFlipping && flipProgress >= Math.PI && gameStatus === 'playing' && (
+      {cellState?.isRevealed && cellState.isMine && !isFlipping && gameStatus === 'playing' && (
         <mesh position={[0, getTileThickness() / 2 + 0.01, 0]}>
           <planeGeometry args={[radius * 0.6, radius * 0.6]} />
           <meshBasicMaterial color="#e74c3c" transparent opacity={0.9} />

@@ -2,9 +2,14 @@
 class SoundManager {
   private audioContext: AudioContext | null = null
   private clickBuffer: AudioBuffer | null = null
+  private audioEnabled: boolean = true
 
   constructor() {
     this.initAudio()
+  }
+
+  setAudioEnabled(enabled: boolean) {
+    this.audioEnabled = enabled
   }
 
   private async initAudio() {
@@ -37,7 +42,7 @@ class SoundManager {
   }
 
   playClick() {
-    if (!this.audioContext || !this.clickBuffer) return
+    if (!this.audioEnabled || !this.audioContext || !this.clickBuffer) return
 
     try {
       const source = this.audioContext.createBufferSource()
@@ -50,7 +55,7 @@ class SoundManager {
   }
 
   playVictory() {
-    if (!this.audioContext) return
+    if (!this.audioEnabled || !this.audioContext) return
 
     try {
       const sampleRate = this.audioContext.sampleRate

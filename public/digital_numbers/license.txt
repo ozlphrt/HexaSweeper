@@ -1,0 +1,11 @@
+Model Information:
+* title:	Digital numbers
+* source:	https://sketchfab.com/3d-models/digital-numbers-00f3f46893064025a45cc43403bb4d53
+* author:	FRH4D (https://sketchfab.com/FRH4D)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Digital numbers" (https://sketchfab.com/3d-models/digital-numbers-00f3f46893064025a45cc43403bb4d53) by FRH4D (https://sketchfab.com/FRH4D) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

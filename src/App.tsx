@@ -380,7 +380,7 @@ function CameraInitializer() {
 
 
 function GameUI() {
-  const { gameStatus, mineCount, flagCount, cellStates } = useStore()
+  const { gameStatus, mineCount, flagCount, cellStates, resetGame, audioEnabled, toggleAudio } = useStore()
   
   // Calculate progress
   const totalCells = Object.keys(cellStates).length
@@ -407,53 +407,42 @@ function GameUI() {
         </div>
       </div>
       
-                  <div className="game-instructions">
-                    Left: Reveal • Right: Flag • Drag: Camera • R: Restart
-                  </div>
-    </div>
-  )
-}
-
-
-
-function DebugControls() {
-  const { debugCameraPosition } = useStore()
-  
-  return (
-    <div className="debug-controls">
-      <h4>Camera Position (Live)</h4>
+      {/* Game Controls */}
+      <div className="game-controls">
+        <button 
+          className="new-game-button glassmorphism"
+          onClick={resetGame}
+        >
+          {gameStatus === 'playing' ? 'New Game' : 'Start New Game'}
+        </button>
+        
+        <button 
+          className="audio-toggle-button glassmorphism"
+          onClick={toggleAudio}
+          title={audioEnabled ? 'Disable Audio' : 'Enable Audio'}
+        >
+          {audioEnabled ? '🔊' : '🔇'}
+        </button>
+      </div>
       
-      <div className="control-section">
-        <h5>Current Camera Position</h5>
-        <div className="control-group">
-          <label>X: {debugCameraPosition.x.toFixed(2)}</label>
-        </div>
-        <div className="control-group">
-          <label>Y: {debugCameraPosition.y.toFixed(2)}</label>
-        </div>
-        <div className="control-group">
-          <label>Z: {debugCameraPosition.z.toFixed(2)}</label>
-        </div>
-        <div className="control-group">
-          <label>Distance: {Math.sqrt(debugCameraPosition.x**2 + debugCameraPosition.y**2 + debugCameraPosition.z**2).toFixed(2)}</label>
-        </div>
-        <div className="control-group">
-          <button onClick={() => {
-            const position = `[${debugCameraPosition.x.toFixed(2)}, ${debugCameraPosition.y.toFixed(2)}, ${debugCameraPosition.z.toFixed(2)}]`
-            navigator.clipboard.writeText(position)
-            alert(`Camera position copied to clipboard: ${position}`)
-          }}>
-            Copy Position
-          </button>
-        </div>
+      <div className="game-instructions">
+        Left: Reveal • Right: Flag • Drag: Camera • R: Restart
       </div>
     </div>
   )
 }
 
+
+
+
+
 export default function App() {
-  const { isRevealing, processRevealQueue, resetGame } = useStore()
+  const { isRevealing, processRevealQueue, resetGame, audioEnabled } = useStore()
   
+  // Sync audio state with sound manager
+  useEffect(() => {
+    soundManager.setAudioEnabled(audioEnabled)
+  }, [audioEnabled])
 
   // Process reveal queue with flooding animation
   useEffect(() => {

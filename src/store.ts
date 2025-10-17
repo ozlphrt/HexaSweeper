@@ -167,12 +167,15 @@ export interface GameState {
   ambientLight: number
   debugTextRotation: { x: number; y: number; z: number }
   debugTextOffset: { x: number; y: number; z: number }
+  debugTextScale: number
   debugFlagRotation: { x: number; y: number; z: number }
   debugFlagOffset: { x: number; y: number; z: number }
   debugCameraPosition: { x: number; y: number; z: number }
   revealQueue: string[]
   isRevealing: boolean
   hoveredTile: string | null
+  gameResetTrigger: number
+  audioEnabled: boolean
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -184,14 +187,17 @@ export const useStore = create<GameState>((set, get) => ({
   cameraRigTarget: null,
   sunlight: 1.0,
   ambientLight: 0.3,
-  debugTextRotation: { x: 4.69, y: 0, z: 0 },
-    debugTextOffset: { x: -0.310, y: -0.110, z: -0.300 },
+  debugTextRotation: { x: 4.700, y: 0.010, z: 0.000 },
+    debugTextOffset: { x: -0.269, y: 0.134, z: 0.229 },
+  debugTextScale: 0.720,
   debugFlagRotation: { x: 0, y: 2.6, z: 0 },
   debugFlagOffset: { x: 0.32, y: 1.00, z: 0.21 },
   debugCameraPosition: { x: 2.21, y: 13.90, z: 22.98 },
   revealQueue: [],
   isRevealing: false,
   hoveredTile: null,
+  gameResetTrigger: 0,
+  audioEnabled: true,
 
   resetScene: () => set({
     pillarConfigs: [],
@@ -202,8 +208,9 @@ export const useStore = create<GameState>((set, get) => ({
   cameraRigTarget: null,
     sunlight: 1.0,
     ambientLight: 0.3,
-    debugTextRotation: { x: 4.69, y: 0, z: 0 },
-    debugTextOffset: { x: -0.310, y: -0.110, z: -0.300 },
+    debugTextRotation: { x: 4.700, y: 0.010, z: 0.000 },
+    debugTextOffset: { x: -0.269, y: 0.134, z: 0.229 },
+    debugTextScale: 0.720,
   revealQueue: [],
   isRevealing: false,
   }),
@@ -325,14 +332,17 @@ export const useStore = create<GameState>((set, get) => ({
 
   setDebugTextOffset: (offset: { x: number; y: number; z: number }) => set({ debugTextOffset: offset }),
 
+  setDebugTextScale: (scale: number) => set({ debugTextScale: scale }),
+
   setDebugFlagRotation: (rotation: { x: number; y: number; z: number }) => set({ debugFlagRotation: rotation }),
 
   setDebugFlagOffset: (offset: { x: number; y: number; z: number }) => set({ debugFlagOffset: offset }),
 
   setDebugCameraPosition: (position: { x: number; y: number; z: number }) => set({ debugCameraPosition: position }),
 
-
   setHoveredTile: (key: string | null) => set({ hoveredTile: key }),
+
+  toggleAudio: () => set((state) => ({ audioEnabled: !state.audioEnabled })),
 
 
   addToRevealQueue: (key: string) => {
@@ -411,7 +421,7 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   resetGame: () => {
-    // First, reset all game state to initial values
+    // First, reset all game state to initial values and trigger reset
     set({ 
       pillarConfigs: [],
       cellStates: {},
@@ -419,53 +429,57 @@ export const useStore = create<GameState>((set, get) => ({
       mineCount: 0,
       flagCount: 0,
       revealQueue: [],
-      isRevealing: false
+      isRevealing: false,
+      gameResetTrigger: get().gameResetTrigger + 1
     })
 
-    // Generate a completely new board with new gaps and mine positions
-    const radius = 0.8
-    const spacingScale = 0.85
-    const rows = 50
-    const cols = 50
-    const maxDistance = 18
+    // Use setTimeout to ensure the reset state is processed before generating new game
+    setTimeout(() => {
+      // Generate a completely new board with new gaps and mine positions
+      const radius = 0.8
+      const spacingScale = 0.85
+      const rows = 50
+      const cols = 50
+      const maxDistance = 18
 
-    // Hexagonal positioning function
-    const hexPosition = (q: number, r: number) => {
-      const size = radius * spacingScale
-      const x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r)
-      const z = size * (3 / 2 * r)
-      return [x, 0, z] as const
-    }
-
-    // Generate new grid configuration
-    const newPillars: { key: string, pos: [number, number, number], height: number }[] = []
-    const r0 = -Math.floor(rows / 2)
-    const c0 = -Math.floor(cols / 2)
-
-    // Create new 50x50 hexagonal grid with circular boundary
-    for (let q = 0; q < cols; q++) {
-      for (let r = 0; r < rows; r++) {
-        const [x, y, z] = hexPosition(q + c0, r + r0)
-
-        // Check if tile is within circular boundary
-        const distanceFromCenter = Math.sqrt(x * x + z * z)
-        if (distanceFromCenter > maxDistance) {
-          continue
-        }
-
-        // 15% chance of creating a gap (no tile)
-        if (Math.random() < 0.15) {
-          continue
-        }
-
-        // Create empty pillars (height 0) for Minesweeper
-        newPillars.push({ key: `p-${q}-${r}`, pos: [x, y, z], height: 0 })
+      // Hexagonal positioning function
+      const hexPosition = (q: number, r: number) => {
+        const size = radius * spacingScale
+        const x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r)
+        const z = size * (3 / 2 * r)
+        return [x, 0, z] as const
       }
-    }
 
-    if (newPillars.length > 0) {
-      const newMineCount = Math.floor(newPillars.length * 0.15) // 15% of actual cells are mines
-      get().initializeGame(newPillars, newMineCount)
-    }
+      // Generate new grid configuration
+      const newPillars: { key: string, pos: [number, number, number], height: number }[] = []
+      const r0 = -Math.floor(rows / 2)
+      const c0 = -Math.floor(cols / 2)
+
+      // Create new 50x50 hexagonal grid with circular boundary
+      for (let q = 0; q < cols; q++) {
+        for (let r = 0; r < rows; r++) {
+          const [x, y, z] = hexPosition(q + c0, r + r0)
+
+          // Check if tile is within circular boundary
+          const distanceFromCenter = Math.sqrt(x * x + z * z)
+          if (distanceFromCenter > maxDistance) {
+            continue
+          }
+
+          // 15% chance of creating a gap (no tile)
+          if (Math.random() < 0.15) {
+            continue
+          }
+
+          // Create empty pillars (height 0) for Minesweeper
+          newPillars.push({ key: `p-${q}-${r}`, pos: [x, y, z], height: 0 })
+        }
+      }
+
+      if (newPillars.length > 0) {
+        const newMineCount = Math.floor(newPillars.length * 0.15) // 15% of actual cells are mines
+        get().initializeGame(newPillars, newMineCount)
+      }
+    }, 50) // Small delay to ensure reset is processed
   },
 }))
