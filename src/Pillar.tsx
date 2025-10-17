@@ -8,7 +8,7 @@ import { soundManager } from './SoundManager'
 import { DigitalNumber } from './DigitalNumber'
 
 // Preload the flag GLTF model to prevent first-flag flickering
-useGLTF.preload('/low_poly_golf_flag_animated/scene.gltf')
+useGLTF.preload('./low_poly_golf_flag_animated/scene.gltf')
 
 // Helper function to get neighboring cells in hexagonal grid
 function getNeighbors(key: string, pillarConfigs: { key: string, pos: [number, number, number], height: number }[]): string[] {
@@ -38,7 +38,7 @@ function getNeighbors(key: string, pillarConfigs: { key: string, pos: [number, n
 
 // Flag component for 3D flag models
 function Flag({ position, scale = 1, color = "#ff6b6b" }: { position: [number, number, number], scale?: number, color?: string }) {
-  const { scene, animations } = useGLTF('/low_poly_golf_flag_animated/scene.gltf')
+  const { scene, animations } = useGLTF('./low_poly_golf_flag_animated/scene.gltf')
   const { debugFlagRotation, debugFlagOffset } = useStore()
   const groupRef = useRef<THREE.Group>(null)
   
