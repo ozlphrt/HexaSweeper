@@ -30,6 +30,178 @@ canvas {
   display: block;
 }
 
+/* Scoreboard Styles */
+.scoreboard {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  min-width: 260px;
+}
+
+
+.progress-container {
+  display: flex;
+  gap: 0px;
+  justify-content: center;
+}
+
+.circular-progress-container:first-child {
+  margin-right: -10px;
+}
+
+.circular-progress-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+}
+
+.circular-progress-container .progress-label {
+  margin-top: -8px;
+}
+
+.progress-ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring-svg {
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+.progress-ring-circle {
+  transition: stroke-dashoffset 0.5s ease-in-out;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+
+.progress-content {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.progress-percentage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-number {
+  font-size: 40px;
+  font-weight: 700;
+  color: #f4efe8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  line-height: 1;
+}
+
+.progress-percent {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f4efe8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  line-height: 1;
+}
+
+.progress-info {
+  text-align: center;
+}
+
+.progress-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #eae7e1;
+  margin-bottom: 2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.progress-count {
+  font-size: 10px;
+  color: #b8b5b0;
+  font-weight: 500;
+}
+
+.scoreboard-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 10px;
+  width: 120px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.new-game-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f4efe8;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  flex: 1;
+}
+
+.audio-toggle-button {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f4efe8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  flex: 0 0 auto;
+}
+
+.new-game-button:hover, .audio-toggle-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.new-game-button:active, .audio-toggle-button:active {
+  transform: translateY(0);
+}
+
+.audio-toggle-button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.game-instructions {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 9px;
+  color: #b8b5b0;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
 /* FPS Counter Styles */
 .fps-counter {
   position: fixed;
@@ -98,10 +270,7 @@ canvas {
   color: #e74c3c;
 }
 
-/* Progress Bar Styles */
-.progress-container {
-  margin: 15px 0;
-}
+/* Old Progress Bar Styles - Removed */
 
 .progress-bar {
   width: 100%;

@@ -7,6 +7,7 @@ import { useStore } from './store'
 import { soundManager } from './SoundManager'
 import { DebugPanel } from './DebugPanel'
 import { CameraTracker } from './CameraTracker'
+import { Scoreboard } from './Scoreboard'
 
 import * as THREE from 'three'
 
@@ -386,58 +387,6 @@ function CameraInitializer() {
 }
 
 
-function GameUI() {
-  const { gameStatus, mineCount, flagCount, cellStates, resetGame, audioEnabled, toggleAudio } = useStore()
-  
-  // Calculate progress
-  const totalCells = Object.keys(cellStates).length
-  const revealedCells = Object.values(cellStates).filter(cell => cell.isRevealed && !cell.isMine).length
-  const safeCells = totalCells - mineCount
-  
-  // Calculate flagged mines (correctly flagged)
-  const flaggedMines = Object.values(cellStates).filter(cell => cell.isFlagged && cell.isMine).length
-  const progress = mineCount > 0 ? (flaggedMines / mineCount) * 100 : 0
-
-  return (
-    <div className="game-ui">
-      {/* Fancy Glassmorphism Progress Bar */}
-      <div className="progress-container">
-        <div className="progress-bar glassmorphism">
-          <div 
-            className="progress-fill" 
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <div className="progress-text large-font">
-          <span className="progress-box">{progress.toFixed(1)}%</span>
-          <span className="progress-box">({flaggedMines}/{mineCount})</span>
-        </div>
-      </div>
-      
-      {/* Game Controls */}
-      <div className="game-controls">
-        <button 
-          className="new-game-button glassmorphism"
-          onClick={resetGame}
-        >
-          {gameStatus === 'playing' ? 'New Game' : 'Start New Game'}
-        </button>
-        
-        <button 
-          className="audio-toggle-button glassmorphism"
-          onClick={toggleAudio}
-          title={audioEnabled ? 'Disable Audio' : 'Enable Audio'}
-        >
-          {audioEnabled ? '🔊' : '🔇'}
-        </button>
-      </div>
-      
-      <div className="game-instructions">
-        Left: Reveal • Right: Flag • Drag: Camera • R: Restart
-      </div>
-    </div>
-  )
-}
 
 
 
@@ -494,7 +443,7 @@ export default function App() {
       </Canvas>
       
       <FpsCounter />
-      <GameUI />
+      <Scoreboard />
       <DebugPanel />
       
       <div className="credits">
