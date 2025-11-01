@@ -1,6 +1,6 @@
 import React, { useRef, useState, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Text, Text3D, useGLTF, useAnimations } from '@react-three/drei'
+import { Text, useGLTF, useAnimations } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { useStore } from './store'
@@ -9,6 +9,7 @@ import { DigitalNumber } from './DigitalNumber'
 
 // Preload the flag GLTF model to prevent first-flag flickering
 useGLTF.preload('/low_poly_golf_flag_animated/scene.gltf')
+
 
 // Helper function to get neighboring cells in hexagonal grid
 function getNeighbors(key: string, pillarConfigs: { key: string, pos: [number, number, number], height: number }[]): string[] {
@@ -125,33 +126,28 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
   
-  const { cellStates, addToRevealQueue, toggleFlag, gameStatus, debugTextRotation, debugTextOffset, debugTextScale, hoveredTile, setHoveredTile, gameResetTrigger, immortalMode } = useStore()
+  // Use selectors to only subscribe to specific store values, preventing unnecessary re-renders
+  const cellState = useStore(state => state.cellStates[pillarKey])
+  const addToRevealQueue = useStore(state => state.addToRevealQueue)
+  const toggleFlag = useStore(state => state.toggleFlag)
+  const gameStatus = useStore(state => state.gameStatus)
+  // DO NOT subscribe to debugTextRotation/Offset/Scale - read via refs in useFrame to prevent re-renders
+  const hoveredTile = useStore(state => state.hoveredTile)
+  const setHoveredTile = useStore(state => state.setHoveredTile)
+  const gameResetTrigger = useStore(state => state.gameResetTrigger)
+  const immortalMode = useStore(state => state.immortalMode)
+  const clickedMinePosition = useStore(state => state.clickedMinePosition)
   
-  const cellState = cellStates[pillarKey]
+  // DO NOT subscribe to debug values - read directly from store in useFrame to prevent re-renders
   
-  // Calculate tile thickness for positioning elements
-  const getTileThickness = () => {
-    const baseThickness = 0.15
-    const thicknessVariation = 0.08
-    const randomSeed = pillarKey.split('-').reduce((acc, val) => acc + val.charCodeAt(0), 0)
-    const randomFactor = Math.sin(randomSeed * 0.1) * 0.5 + 0.5
-    const positionFactor = Math.sin(position[0] * 0.3) * Math.cos(position[2] * 0.4)
-    return baseThickness + (positionFactor * randomFactor * thicknessVariation)
-  }
-  
-
-  
-  
+  // Animation state
+  const [isFlipping, setIsFlipping] = useState(false)
+  const [wasRevealed, setWasRevealed] = useState(false)
   
   // Click vs drag detection
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null)
   const dragThreshold = 3 // pixels - reduced for better responsiveness
-
-  
-  // Animation state - simplified for performance
-  const [isFlipping, setIsFlipping] = useState(false)
-  const [wasRevealed, setWasRevealed] = useState(false)
   const flipStartTime = useRef<number>(0)
   const flipDuration = 0.3 // 300ms flip duration
   
@@ -160,6 +156,79 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   const [gameOverFallProgress, setGameOverFallProgress] = useState(0)
   const [gameOverFallDelay, setGameOverFallDelay] = useState(0)
   const fallDistance = -10 // Fall 10 units down
+  
+  // Simple ref for text group to update position/rotation
+  const textGroupRef = useRef<THREE.Group>(null)
+  
+  // Track if text was ever shown - once true, never becomes false (except on reset)
+  // This ensures text stays visible even if cellState is temporarily undefined during re-renders
+  const textWasShownRef = useRef(false)
+  const neighborCountRef = useRef<number | null>(null)
+  const neighborCountStringRef = useRef<string>('') // Start empty, not '0' - only set when we have valid data
+  
+  // Store offset/rotation/scale/font in refs - updated in useFrame from store directly (no subscriptions)
+  const offsetRef = useRef({ x: 0, y: 0, z: 0 })
+  const rotationRef = useRef({ x: 0, y: 0, z: 0 })
+  const scaleRef = useRef(0.72)
+  const fontRef = useRef<string>('/fonts/helvetiker_bold.typeface.json')
+  
+  // Check if text should be displayed
+  const shouldShowText = cellState && cellState.isRevealed && !cellState.isMine && cellState.neighborMineCount > 0
+  
+  // Once text should be shown, mark it as shown forever and store the count
+  // CRITICAL: Only set once - lock in the value when first shown
+  // IMPORTANT: Update refs BEFORE text becomes visible to prevent showing '0'
+  if (cellState?.isRevealed && !cellState?.isMine && cellState?.neighborMineCount !== undefined && cellState.neighborMineCount > 0) {
+    // Always update the refs when we have valid data (not just first time)
+    // This ensures we have the correct value before text becomes visible
+    neighborCountRef.current = cellState.neighborMineCount
+    neighborCountStringRef.current = String(cellState.neighborMineCount)
+    if (!textWasShownRef.current) {
+      textWasShownRef.current = true
+    }
+  }
+  
+  // Update text position/rotation/size in useFrame - read directly from store, NO subscriptions
+  // CRITICAL: Reading from store.getState() in useFrame prevents component re-renders
+  // This ensures Text component never unmounts when offset sliders change
+  useFrame(() => {
+    // Read debug values directly from store (no subscription = no re-render)
+    const storeState = useStore.getState()
+    offsetRef.current = storeState.debugTextOffset
+    rotationRef.current = storeState.debugTextRotation
+    scaleRef.current = storeState.debugTextScale
+    fontRef.current = storeState.debugTextFont
+    
+    // Only update if text group exists and we have valid data (check string ref to ensure we have content)
+    if (textGroupRef.current && neighborCountStringRef.current && neighborCountRef.current !== null) {
+      const fallY = isFalling ? (fallDistance * gameOverFallProgress * gameOverFallProgress) : 0
+      const fallRot = isFalling ? gameOverFallProgress * 2 : 0
+      
+      // Use ref values (updated from store above)
+      textGroupRef.current.position.set(
+        offsetRef.current.x * radius,
+        (offsetRef.current.y + fallY) * radius,
+        (0.02 + offsetRef.current.z) * radius
+      )
+      textGroupRef.current.rotation.set(
+        rotationRef.current.x + fallRot,
+        rotationRef.current.y,
+        rotationRef.current.z + fallRot
+      )
+      
+      // Update scale from ref
+      textGroupRef.current.scale.setScalar(scaleRef.current / 0.72)
+      
+      textGroupRef.current.visible = true
+    } else if (textGroupRef.current) {
+      textGroupRef.current.visible = false
+    }
+  })
+  
+  // Calculate tile thickness for positioning elements
+  const getTileThickness = () => {
+    return 0.15
+  }
 
   // Reset all animation states when game is reset
   React.useEffect(() => {
@@ -169,21 +238,24 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
     setGameOverFallProgress(0)
     setGameOverFallDelay(0)
     flipStartTime.current = 0
+           textWasShownRef.current = false
+           neighborCountRef.current = null
+           neighborCountStringRef.current = ''
+           // Reset font ref to current store value
+           fontRef.current = useStore.getState().debugTextFont
+           // Hide text on reset
+           if (textGroupRef.current) {
+             textGroupRef.current.visible = false
+           }
   }, [gameResetTrigger])
   
   
   
   // Create hexagonal geometry with chamfered edges
   const hexGeometry = useMemo(() => {
-    // Calculate thickness here to ensure it's included in the memoization
-    const baseThickness = 0.15
-    const thicknessVariation = 0.08
-    const randomSeed = pillarKey.split('-').reduce((acc, val) => acc + val.charCodeAt(0), 0)
-    const randomFactor = Math.sin(randomSeed * 0.1) * 0.5 + 0.5 // 0 to 1
-    const positionFactor = Math.sin(position[0] * 0.3) * Math.cos(position[2] * 0.4)
-    const calculatedThickness = baseThickness + (positionFactor * randomFactor * thicknessVariation)
+    const thickness = 0.15
     
-    const geometry = new THREE.CylinderGeometry(radius, radius, calculatedThickness, 6, 1, false)
+    const geometry = new THREE.CylinderGeometry(radius, radius, thickness, 6, 1, false)
     
     // Add subtle chamfer to edges
     const positionAttribute = geometry.getAttribute('position')
@@ -250,6 +322,7 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       if (event.button === 0) { // Left click
         event.stopPropagation()
         if (gameStatus === 'playing' && cellState && !cellState.isFlagged) {
+          // AudioContext is pre-initialized on first user interaction (see App.tsx)
           addToRevealQueue(pillarKey)
         }
       } else if (event.button === 2) { // Right click
@@ -269,13 +342,67 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
   const getCellColor = () => {
     if (!cellState) return "#f4efe8" // Default creamy white
 
-    // Game over state - special colors for mines
+    // Game over state - special colors for mines and heatmap for unflipped tiles
     if (gameStatus === 'won' || gameStatus === 'lost') {
       if (cellState.isMine) {
         if (cellState.isFlagged) {
           return "#4CAF50" // Softer green for correctly flagged mines
         } else {
           return "#f44336" // Softer red for unflagged mines
+        }
+      }
+      
+      // Apply heatmap to unflipped (unrevealed) tiles based on distance to clicked mine
+      if (gameStatus === 'lost' && !cellState.isRevealed && !cellState.isFlagged && clickedMinePosition) {
+        // Calculate hex distance (manhattan-like distance on hex grid)
+        // Extract hex coordinates from position (approximate - assumes grid spacing)
+        // Find which pillar corresponds to clicked mine
+        const clickedMinePillar = allPillars.find(p => {
+          const dx = Math.abs(p.pos[0] - clickedMinePosition[0])
+          const dz = Math.abs(p.pos[2] - clickedMinePosition[2])
+          return dx < 0.5 && dz < 0.5 // Small threshold for matching
+        })
+        
+        if (clickedMinePillar) {
+          // Calculate hex distance using axial coordinates
+          const [clickedQ, clickedR] = clickedMinePillar.key.split('-').slice(1).map(Number)
+          const [currentQ, currentR] = pillarKey.split('-').slice(1).map(Number)
+          
+          // Hex distance in axial coordinates
+          const hexDistance = (Math.abs(clickedQ - currentQ) + 
+                              Math.abs(clickedQ + clickedR - currentQ - currentR) + 
+                              Math.abs(clickedR - currentR)) / 2
+          
+          // Normalize distance (assuming max grid distance ~15-20 hex units)
+          const maxDistance = 15
+          const normalizedDistance = Math.min(hexDistance / maxDistance, 1)
+          
+          // Create heatmap: closer = vibrant red/orange, farther = orange/yellow
+          // Mine red (#f44336 = rgb(244, 67, 54))
+          // Hottest: One tone less saturated than mine = rgb(244, 75, 62)
+          // Red (close) -> Orange -> Yellow (far, still saturated)
+          let r, g, b
+          if (normalizedDistance < 0.33) {
+            // Close: Vibrant red (one tone less saturated than mine) to Orange
+            const t = normalizedDistance / 0.33
+            r = 244
+            g = Math.floor(75 + (130 * t)) // 75 -> 205
+            b = Math.floor(62 + (43 * t))  // 62 -> 105
+          } else if (normalizedDistance < 0.66) {
+            // Mid: Orange to Yellow (more saturated)
+            const t = (normalizedDistance - 0.33) / 0.33
+            r = 255
+            g = Math.floor(205 + (50 * t))  // 205 -> 255
+            b = Math.floor(105 - (55 * t))  // 105 -> 50
+          } else {
+            // Far: Yellow to light yellow (still somewhat saturated, not white)
+            const t = (normalizedDistance - 0.66) / 0.34
+            r = 255
+            g = 255
+            b = Math.floor(50 + (100 * t))  // 50 -> 150 (light yellow, not white)
+          }
+          
+          return `rgb(${r}, ${g}, ${b})`
         }
       }
     }
@@ -324,10 +451,12 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
       setIsFlipping(true)
       flipStartTime.current = performance.now()
       setWasRevealed(true)
-      // Play click sound when flip starts
-      soundManager.playClick()
+      // Play click sound when flip starts (unless it's a mine - game over sound will play instead)
+      if (!cellState.isMine && gameStatus !== 'lost') {
+        soundManager.playClick()
+      }
     }
-  }, [cellState?.isRevealed, wasRevealed])
+  }, [cellState?.isRevealed, wasRevealed, cellState?.isMine, gameStatus])
 
   // Trigger falling animation when game is over
   React.useEffect(() => {
@@ -425,32 +554,26 @@ export function Pillar({ position, height, radius, allPillars, pillarKey }: Prop
         
       </mesh>
       
-      {/* Display mine count as 3D text - positioned outside mesh to avoid flip rotation */}
-      {cellState?.isRevealed && !cellState.isMine && cellState.neighborMineCount > 0 && (
-        <Text3D
-          position={[
-            debugTextOffset.x,
-            debugTextOffset.y + (isFalling ? (fallDistance * gameOverFallProgress * gameOverFallProgress) : 0),
-            0.02 + debugTextOffset.z
-          ]}
-          font="./fonts/helvetiker_bold.typeface.json"
-          size={radius * debugTextScale}
-          height={radius * 0.01}
-          curveSegments={2}
-          bevelEnabled={false}
-          rotation={[
-            debugTextRotation.x + (isFalling ? gameOverFallProgress * 2 : 0),
-            debugTextRotation.y,
-            debugTextRotation.z + (isFalling ? gameOverFallProgress * 2 : 0)
-          ]}
-          anchorX="center"
-          anchorY="middle"
-          castShadow={false}
-          receiveShadow={false}
-        >
-          {cellState.neighborMineCount}
-          <meshStandardMaterial color="#ffffff" />
-        </Text3D>
+      {/* Display mine count as text - only render when we have valid data */}
+      {/* Component renders only when neighborCountStringRef has valid content to prevent showing '0' */}
+      {/* Visibility controlled by conditional rendering + group.visible in useFrame */}
+      {/* Stable key prevents remounting - content updates via children prop */}
+      {neighborCountStringRef.current && (
+        <group ref={textGroupRef}>
+          <Text
+            key={`text-${pillarKey}`}
+            position={[0, 0, 0]}
+            fontSize={radius * 0.72}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={0}
+            strokeWidth={0.08}
+            strokeColor="#ffffff"
+          >
+            {neighborCountStringRef.current}
+          </Text>
+        </group>
       )}
       
       

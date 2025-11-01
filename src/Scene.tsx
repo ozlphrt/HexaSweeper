@@ -75,7 +75,7 @@ export default function Scene() {
       
       
       {/* Fill Light - Soft ambient light for overall illumination */}
-      <ambientLight intensity={0.4} />
+      <ambientLight intensity={ambientLight} />
       
       {/* Key Fill Light - Front right to balance the main sunlight */}
       <directionalLight

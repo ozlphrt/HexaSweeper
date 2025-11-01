@@ -425,16 +425,56 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [resetGame])
 
-
-
+  // Pre-initialize AudioContext on user gesture to prevent flicker on first click
+  // Only use explicit user gestures (click, keydown, touchstart) - not mouse move
+  // Browsers require actual user interaction to resume AudioContext
+  useEffect(() => {
+    let audioInitialized = false
+    
+    const initAudioOnInteraction = () => {
+      if (audioInitialized) return
+      audioInitialized = true
+      
+      // AudioContext initialization is deferred, so ensure it exists first
+      // If not yet initialized, the SoundManager will initialize it on first use
+      const audioCtx = soundManager.getAudioContext()
+      if (audioCtx) {
+        // If AudioContext exists but is suspended, resume it
+        // This must happen during a user gesture (click, keydown, touchstart)
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {
+            // Silently fail - will be retried on next user gesture
+          })
+        }
+      }
+      // If AudioContext doesn't exist yet, it will be created on first sound play
+      // The deferred initialization ensures it doesn't block page load
+    }
+    
+    // Only listen to explicit user gestures (not mouse movement)
+    // These events allow AudioContext resume per browser autoplay policy
+    const options = { passive: true, capture: true }
+    window.addEventListener('pointerdown', initAudioOnInteraction, options)
+    window.addEventListener('mousedown', initAudioOnInteraction, options)
+    window.addEventListener('touchstart', initAudioOnInteraction, options)
+    window.addEventListener('keydown', initAudioOnInteraction, options)
+    
+    return () => {
+      window.removeEventListener('pointerdown', initAudioOnInteraction, options as any)
+      window.removeEventListener('mousedown', initAudioOnInteraction, options as any)
+      window.removeEventListener('touchstart', initAudioOnInteraction, options as any)
+      window.removeEventListener('keydown', initAudioOnInteraction, options as any)
+    }
+  }, [])
 
   return (
     <>
       <Canvas
-        shadows
-        dpr={[1, 2]}
-        camera={{ position: [8.7, 9.8, 24], fov: 45, near: 0.1, far: 200 }}
-      >
+          shadows
+          dpr={[1, 2]}
+          camera={{ position: [8.7, 9.8, 24], fov: 45, near: 0.1, far: 200 }}
+          style={{ background: '#2c3e50' }}
+        >
         <color attach="background" args={['#2c3e50']} />
         <Scene />
         <CameraInitializer />

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Pillar } from './Pillar'
 import { useStore } from './store'
 
@@ -18,8 +18,11 @@ export function HexGrid() {
     return [x, 0, z] as const
   }
   
-  // Initialize game with mines when component mounts
-  useEffect(() => {
+  // Track initialization to prevent flicker on fresh start
+  const isInitializing = useRef(false)
+  
+  // Generate grid configuration function
+  const generateGrid = () => {
     const r0 = -Math.floor(rows / 2)  // -25
     const c0 = -Math.floor(cols / 2)  // -25
     const maxDistance = 18  // Circular boundary radius
@@ -48,11 +51,35 @@ export function HexGrid() {
       }
     }
     
-    if (arr.length > 0) {
-      const mineCount = Math.floor(arr.length * 0.15) // 15% of cells are mines
-      initializeGame(arr, mineCount)
+    return arr
+  }
+  
+  // Initialize game immediately on mount (synchronously) to prevent flicker
+  // Use useLayoutEffect to run before paint, ensuring grid exists before first render
+  React.useLayoutEffect(() => {
+    if (pillarConfigs.length === 0 && !isInitializing.current) {
+      isInitializing.current = true
+      const arr = generateGrid()
+      if (arr.length > 0) {
+        const mineCount = Math.floor(arr.length * 0.15) // 15% of cells are mines
+        initializeGame(arr, mineCount)
+      }
+      isInitializing.current = false
     }
-  }, []) // Empty dependency array to run only once
+  }, []) // Only run on mount - resets handled separately
+  
+  // Handle reset - re-initialize when pillarConfigs becomes empty after a reset
+  useEffect(() => {
+    if (pillarConfigs.length === 0 && !isInitializing.current) {
+      isInitializing.current = true
+      const arr = generateGrid()
+      if (arr.length > 0) {
+        const mineCount = Math.floor(arr.length * 0.15)
+        initializeGame(arr, mineCount)
+      }
+      isInitializing.current = false
+    }
+  }, [pillarConfigs.length, initializeGame])
   
   return (
     <>

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { soundManager } from './SoundManager'
 
 // Helper function to get neighboring cells in hexagonal grid
 function getNeighbors(key: string, pillarConfigs: PillarConfig[]): string[] {
@@ -170,6 +171,7 @@ export interface GameState {
   debugTextRotation: { x: number; y: number; z: number }
   debugTextOffset: { x: number; y: number; z: number }
   debugTextScale: number
+  debugTextFont: string
   debugFlagRotation: { x: number; y: number; z: number }
   debugFlagOffset: { x: number; y: number; z: number }
   debugCameraPosition: { x: number; y: number; z: number }
@@ -178,6 +180,7 @@ export interface GameState {
   revealQueue: string[]
   isRevealing: boolean
   hoveredTile: string | null
+  clickedMinePosition: [number, number, number] | null
   gameResetTrigger: number
   audioEnabled: boolean
   immortalMode: boolean
@@ -190,22 +193,24 @@ export const useStore = create<GameState>((set, get) => ({
   mineCount: 0,
   flagCount: 0,
   cameraRigTarget: null,
-  sunlight: 1.0,
-  ambientLight: 0.3,
+  sunlight: 1.27,
+  ambientLight: 0.53,
   debugTextRotation: { x: 4.700, y: 0.010, z: 0.000 },
-    debugTextOffset: { x: -0.269, y: 0.134, z: 0.229 },
-  debugTextScale: 0.720,
-  debugFlagRotation: { x: 0, y: 2.6, z: 0 },
-  debugFlagOffset: { x: 0.32, y: 1.00, z: 0.21 },
-  debugCameraPosition: { x: 8.7, y: 9.8, z: 24 },
-  debugCameraTarget: { x: 0, y: 0, z: 0 },
-  debugCameraDirection: { x: 0, y: 0, z: 0 },
-  revealQueue: [],
-  isRevealing: false,
-  hoveredTile: null,
-    gameResetTrigger: 0,
-    audioEnabled: true,
-    immortalMode: false,
+    debugTextOffset: { x: 0.015, y: 0.134, z: -0.058 },
+  debugTextScale: 1.030,
+  debugTextFont: '/fonts/helvetiker_bold.typeface.json',
+  debugFlagRotation: { x: 0.000, y: 2.600, z: 0.000 },
+  debugFlagOffset: { x: 0.320, y: 1.000, z: 0.210 },
+  debugCameraPosition: { x: 1.0, y: 10.4, z: 26.1 },
+  debugCameraTarget: { x: 2.5, y: -42.8, z: -58.5 },
+  debugCameraDirection: { x: 0.02, y: -0.53, z: -0.85 },
+      revealQueue: [],
+      isRevealing: false,
+      hoveredTile: null,
+      clickedMinePosition: null,
+      gameResetTrigger: 0,
+      audioEnabled: true,
+      immortalMode: false,
 
   resetScene: () => set({
     pillarConfigs: [],
@@ -214,11 +219,17 @@ export const useStore = create<GameState>((set, get) => ({
     mineCount: 0,
     flagCount: 0,
   cameraRigTarget: null,
-    sunlight: 1.0,
-    ambientLight: 0.3,
+    sunlight: 1.27,
+    ambientLight: 0.53,
     debugTextRotation: { x: 4.700, y: 0.010, z: 0.000 },
-    debugTextOffset: { x: -0.269, y: 0.134, z: 0.229 },
-    debugTextScale: 0.720,
+    debugTextOffset: { x: 0.015, y: 0.134, z: -0.058 },
+    debugTextScale: 1.030,
+    debugTextFont: '/fonts/helvetiker_bold.typeface.json',
+    debugFlagRotation: { x: 0.000, y: 2.600, z: 0.000 },
+    debugFlagOffset: { x: 0.320, y: 1.000, z: 0.210 },
+    debugCameraPosition: { x: 1.0, y: 10.4, z: 26.1 },
+    debugCameraTarget: { x: 2.5, y: -42.8, z: -58.5 },
+    debugCameraDirection: { x: 0.02, y: -0.53, z: -0.85 },
   revealQueue: [],
   isRevealing: false,
   }),
@@ -292,7 +303,7 @@ export const useStore = create<GameState>((set, get) => ({
 
     // Check if it's a mine
     if (cell.isMine) {
-      const { immortalMode } = get()
+      const { immortalMode, pillarConfigs } = get()
       if (immortalMode) {
         // In immortal mode, just flag the mine and continue
         set((state) => ({
@@ -303,7 +314,18 @@ export const useStore = create<GameState>((set, get) => ({
         }))
         return
       } else {
-        set({ gameStatus: 'lost' })
+        // Find the clicked mine's position from pillarConfigs
+        const clickedMinePillar = pillarConfigs.find(p => p.key === key)
+        const clickedMinePosition: [number, number, number] | null = clickedMinePillar 
+          ? clickedMinePillar.pos 
+          : null
+        set({ 
+          gameStatus: 'lost',
+          clickedMinePosition 
+        })
+        // Play game over sound when mine is clicked
+        // Call directly - the click is a user interaction so AudioContext can resume
+        soundManager.playGameOver()
         return
       }
     }
@@ -355,6 +377,8 @@ export const useStore = create<GameState>((set, get) => ({
 
   setDebugTextScale: (scale: number) => set({ debugTextScale: scale }),
 
+  setDebugTextFont: (font: string) => set({ debugTextFont: font }),
+
   setDebugFlagRotation: (rotation: { x: number; y: number; z: number }) => set({ debugFlagRotation: rotation }),
 
   setDebugFlagOffset: (offset: { x: number; y: number; z: number }) => set({ debugFlagOffset: offset }),
@@ -377,7 +401,7 @@ export const useStore = create<GameState>((set, get) => ({
 
 
   addToRevealQueue: (key: string) => {
-    const { cellStates, gameStatus } = get()
+    const { cellStates, gameStatus, revealQueue, isRevealing } = get()
     const cell = cellStates[key]
 
     // Check if cell exists and is not already revealed/flagged
@@ -385,7 +409,7 @@ export const useStore = create<GameState>((set, get) => ({
       return
     }
 
-
+    // Batch state update to reduce flicker
     set((state) => ({
       revealQueue: [...state.revealQueue, key],
       isRevealing: true
@@ -420,11 +444,24 @@ export const useStore = create<GameState>((set, get) => ({
         set({ cellStates: newCellStates, revealQueue: newQueue })
         return
       } else {
-        // Game over - reveal all mines
+        // Game over - reveal all mines and store clicked mine position
         Object.values(newCellStates).forEach(c => {
           if (c.isMine) c.isRevealed = true
         })
-        set({ cellStates: newCellStates, gameStatus: 'lost', revealQueue: [], isRevealing: false })
+        // Find the clicked mine's position from pillarConfigs
+        const clickedMinePillar = pillarConfigs.find(p => p.key === key)
+        const clickedMinePosition: [number, number, number] | null = clickedMinePillar 
+          ? clickedMinePillar.pos 
+          : null
+        set({ 
+          cellStates: newCellStates, 
+          gameStatus: 'lost', 
+          revealQueue: [], 
+          isRevealing: false,
+          clickedMinePosition 
+        })
+        // Play game over sound - ensure AudioContext is resumed
+        soundManager.playGameOver()
         return
       }
     }
@@ -464,6 +501,7 @@ export const useStore = create<GameState>((set, get) => ({
       flagCount: 0,
       revealQueue: [],
       isRevealing: false,
+      clickedMinePosition: null,
       gameResetTrigger: get().gameResetTrigger + 1
     })
 

@@ -46,8 +46,12 @@ export function Cell({ cell, position, size }: CellProps) {
     setClicked(true)
     
     if (event.button === 0) { // Left click
+      // Don't play click sound for mines - game over sound will play instead
+      const wasMine = cell.content === 'mine'
       revealCell(cell.id)
-      soundManager.playClick()
+      if (!wasMine) {
+        soundManager.playClick()
+      }
     } else if (event.button === 2) { // Right click
       toggleFlag(cell.id)
       soundManager.playFlag()
