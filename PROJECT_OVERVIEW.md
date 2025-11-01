@@ -33,3 +33,11 @@
 - Establishes the **visual identity** and **physics feel**
 - Clean foundation for later mechanics (chain reactions, procedural collapse, scoring)
 - Fits your **Cursor** iterative workflow (modular docs + branches)
+
+## GitHub Links
+
+### Latest Commit (AudioContext Fix + Heatmap Enhancement)
+- **Repository**: https://github.com/ozlphrt/HexaSweeper
+- **Commit**: `958921eaa2f348c0bf6907ed18db90e54d3c3af2`
+- **Tree URL**: https://github.com/ozlphrt/HexaSweeper/tree/958921eaa2f348c0bf6907ed18db90e54d3c3af2
+- **Commit URL**: https://github.com/ozlphrt/HexaSweeper/commit/958921eaa2f348c0bf6907ed18db90e54d3c3af2
