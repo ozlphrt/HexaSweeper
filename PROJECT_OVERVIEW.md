@@ -36,9 +36,9 @@
 
 ## GitHub Links
 
-### Latest Commit (Game Over Animation Fix)
+### Latest Commit (Debug Panel - Commit Hash Display)
 - **Repository**: https://github.com/ozlphrt/HexaSweeper
-- **Commit**: `1a52cef30821a78d3d6bf1b6e2d1ac04b720a2bc`
-- **Tree URL**: https://github.com/ozlphrt/HexaSweeper/tree/1a52cef30821a78d3d6bf1b6e2d1ac04b720a2bc
-- **Commit URL**: https://github.com/ozlphrt/HexaSweeper/commit/1a52cef30821a78d3d6bf1b6e2d1ac04b720a2bc
+- **Commit**: `c9e51762d546826c6d7de1830a0eb76b3139c8f2`
+- **Tree URL**: https://github.com/ozlphrt/HexaSweeper/tree/c9e51762d546826c6d7de1830a0eb76b3139c8f2
+- **Commit URL**: https://github.com/ozlphrt/HexaSweeper/commit/c9e51762d546826c6d7de1830a0eb76b3139c8f2
 - **Playable URL**: https://ozlphrt.github.io/HexaSweeper/
