@@ -36,8 +36,9 @@
 
 ## GitHub Links
 
-### Latest Commit (AudioContext Fix + Heatmap Enhancement)
+### Latest Commit (Game Over Animation Fix)
 - **Repository**: https://github.com/ozlphrt/HexaSweeper
-- **Commit**: `958921eaa2f348c0bf6907ed18db90e54d3c3af2`
-- **Tree URL**: https://github.com/ozlphrt/HexaSweeper/tree/958921eaa2f348c0bf6907ed18db90e54d3c3af2
-- **Commit URL**: https://github.com/ozlphrt/HexaSweeper/commit/958921eaa2f348c0bf6907ed18db90e54d3c3af2
+- **Commit**: `1a52cef30821a78d3d6bf1b6e2d1ac04b720a2bc`
+- **Tree URL**: https://github.com/ozlphrt/HexaSweeper/tree/1a52cef30821a78d3d6bf1b6e2d1ac04b720a2bc
+- **Commit URL**: https://github.com/ozlphrt/HexaSweeper/commit/1a52cef30821a78d3d6bf1b6e2d1ac04b720a2bc
+- **Playable URL**: https://ozlphrt.github.io/HexaSweeper/
