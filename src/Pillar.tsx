@@ -45,6 +45,7 @@ function Flag({ position, scale = 1, color = "#ff6b6b" }: { position: [number, n
   const { scene, animations } = useGLTF(FLAG_MODEL_PATH)
   const { debugFlagRotation, debugFlagOffset } = useStore()
   const groupRef = useRef<THREE.Group>(null)
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null)
   
   // Create a unique instance for this flag
   const flagInstance = React.useMemo(() => {
@@ -79,6 +80,7 @@ function Flag({ position, scale = 1, color = "#ff6b6b" }: { position: [number, n
     // Ensure the instance has its own animation mixer
     if (animations && animations.length > 0) {
       const mixer = new THREE.AnimationMixer(instance)
+      mixerRef.current = mixer
       const action = mixer.clipAction(animations[0])
       action.play()
       
@@ -91,15 +93,29 @@ function Flag({ position, scale = 1, color = "#ff6b6b" }: { position: [number, n
   // PERFORMANCE: Throttle animation updates more aggressively
   const lastAnimationUpdate = useRef(0)
   useFrame((state, delta) => {
+    // Skip if mixer is null or stopped
+    if (!mixerRef.current) return
+    
     // PERFORMANCE: Throttle to ~30fps for animations (flags don't need 60fps)
     const now = performance.now()
     if (now - lastAnimationUpdate.current < 33) return // ~30fps max
     lastAnimationUpdate.current = now
     
-    if (flagInstance && (flagInstance as any).mixer) {
-      ;(flagInstance as any).mixer.update(delta)
-    }
+    mixerRef.current.update(delta)
   })
+  
+  // Cleanup: stop animation mixer when flag is removed (component unmounts)
+  React.useEffect(() => {
+    return () => {
+      if (mixerRef.current) {
+        mixerRef.current.stopAllAction()
+        if (flagInstance) {
+          mixerRef.current.uncacheRoot(flagInstance)
+        }
+        mixerRef.current = null
+      }
+    }
+  }, [flagInstance])
   
   return (
     <group 
@@ -212,76 +228,124 @@ export function Pillar({ position, height, radius, allPillars, pillarMap, pillar
   // OPTIMIZATION: Skip useFrame entirely if no text will ever be shown
   const lastDebugUpdate = useRef(0)
   const textUpdateSkipped = useRef(false)
+  // Track last known values to avoid unnecessary updates
+  const lastTextPositionRef = useRef<{ x: number; y: number; z: number } | null>(null)
+  const lastTextRotationRef = useRef<{ x: number; y: number; z: number } | null>(null)
+  const lastTextScaleRef = useRef<number | null>(null)
+  const textStableRef = useRef(false) // Track if text is stable and doesn't need updates
+  
   useFrame(() => {
-    // CRITICAL: Hide all text when game is over (won or lost)
-    const currentGameStatus = useStore.getState().gameStatus
-    if ((currentGameStatus === 'won' || currentGameStatus === 'lost') && textGroupRef.current) {
-      textGroupRef.current.visible = false
-      return
-    }
-    
-    // CRITICAL: Hide text immediately when tile starts falling
-    if (isFalling && textGroupRef.current) {
-      textGroupRef.current.visible = false
-      return
-    }
-    
-    // PERFORMANCE: Skip entirely if text was never shown and won't be shown
+    // CRITICAL: Skip entirely if text was never shown and won't be shown
     if (!textWasShownRef.current && !neighborCountStringRef.current) {
       if (!textUpdateSkipped.current) {
         textUpdateSkipped.current = true
-        // Set visible false once, then skip all future calls
         if (textGroupRef.current) {
           textGroupRef.current.visible = false
         }
       }
       return
     }
-    textUpdateSkipped.current = false
+    
+    // CRITICAL: Hide all text when game is over (won or lost)
+    const currentGameStatus = useStore.getState().gameStatus
+    if ((currentGameStatus === 'won' || currentGameStatus === 'lost')) {
+      if (textGroupRef.current && textGroupRef.current.visible) {
+        textGroupRef.current.visible = false
+        textStableRef.current = false
+      }
+      return
+    }
+    
+    // CRITICAL: Hide text immediately when tile starts falling
+    if (isFalling) {
+      if (textGroupRef.current && textGroupRef.current.visible) {
+        textGroupRef.current.visible = false
+        textStableRef.current = false
+      }
+      return
+    }
     
     // Early return if no text to display
     if (!neighborCountStringRef.current || neighborCountRef.current === null) {
-      if (textGroupRef.current) {
+      if (textGroupRef.current && textGroupRef.current.visible) {
         textGroupRef.current.visible = false
+        textStableRef.current = false
       }
       return
     }
     
     if (!textGroupRef.current) return
     
-    // Throttle debug value reads - only read every 100ms (debug sliders don't need 60fps)
+    // PERFORMANCE: Throttle debug value reads - only read every 200ms (debug sliders don't change often)
     const now = performance.now()
-    if (now - lastDebugUpdate.current > 100) {
+    let valuesChanged = false
+    if (now - lastDebugUpdate.current > 200) {
       const storeState = useStore.getState()
-      offsetRef.current = storeState.debugTextOffset
-      rotationRef.current = storeState.debugTextRotation
-      scaleRef.current = storeState.debugTextScale
+      const newOffset = storeState.debugTextOffset
+      const newRotation = storeState.debugTextRotation
+      const newScale = storeState.debugTextScale
+      
+      // Check if values actually changed
+      if (
+        offsetRef.current.x !== newOffset.x ||
+        offsetRef.current.y !== newOffset.y ||
+        offsetRef.current.z !== newOffset.z ||
+        rotationRef.current.x !== newRotation.x ||
+        rotationRef.current.y !== newRotation.y ||
+        rotationRef.current.z !== newRotation.z ||
+        scaleRef.current !== newScale
+      ) {
+        valuesChanged = true
+        offsetRef.current = newOffset
+        rotationRef.current = newRotation
+        scaleRef.current = newScale
+        textStableRef.current = false
+      }
+      
       fontRef.current = storeState.debugTextFont
       lastDebugUpdate.current = now
     }
     
-    // Only update position/rotation if falling (animating) or if this is first frame
-    const fallY = isFalling ? (fallDistance * gameOverFallProgress * gameOverFallProgress) : 0
-    const fallRot = isFalling ? gameOverFallProgress * 2 : 0
+    // Calculate final values
+    const fallY = 0 // No falling for text in normal gameplay
+    const fallRot = 0
+    const finalPosY = (offsetRef.current.y + fallY) * radius
+    const finalScale = scaleRef.current / 0.72
     
-    // Only update if animating OR if values changed (check if position differs)
-    const needsUpdate = isFalling || 
-      textGroupRef.current.position.y !== (offsetRef.current.y + fallY) * radius ||
-      textGroupRef.current.scale.x !== scaleRef.current / 0.72
+    // PERFORMANCE: Skip update if text is stable (visible, positioned correctly, no animations)
+    if (!isFalling && textStableRef.current && !valuesChanged) {
+      // Verify position/scale haven't drifted (safety check)
+      const currentY = textGroupRef.current.position.y
+      const currentScale = textGroupRef.current.scale.x
+      if (
+        Math.abs(currentY - finalPosY) < 0.001 &&
+        Math.abs(currentScale - finalScale) < 0.001
+      ) {
+        return // Text is stable, skip this frame
+      }
+    }
     
-    if (needsUpdate || !textGroupRef.current.visible) {
-      textGroupRef.current.position.set(
-        offsetRef.current.x * radius,
-        (offsetRef.current.y + fallY) * radius,
-        (0.02 + offsetRef.current.z) * radius
-      )
-      textGroupRef.current.rotation.set(
-        rotationRef.current.x + fallRot,
-        rotationRef.current.y,
-        rotationRef.current.z + fallRot
-      )
-      textGroupRef.current.scale.setScalar(scaleRef.current / 0.72)
+    // Update position/rotation/scale
+    const needsVisibilityUpdate = !textGroupRef.current.visible
+    textGroupRef.current.position.set(
+      offsetRef.current.x * radius,
+      finalPosY,
+      (0.02 + offsetRef.current.z) * radius
+    )
+    textGroupRef.current.rotation.set(
+      rotationRef.current.x + fallRot,
+      rotationRef.current.y,
+      rotationRef.current.z + fallRot
+    )
+    textGroupRef.current.scale.setScalar(finalScale)
+    
+    if (needsVisibilityUpdate) {
       textGroupRef.current.visible = true
+    }
+    
+    // Mark as stable if not animating and values haven't changed
+    if (!isFalling && !valuesChanged) {
+      textStableRef.current = true
     }
   })
   
@@ -321,6 +385,11 @@ export function Pillar({ position, height, radius, allPillars, pillarMap, pillar
       textWasShownRef.current = false
       neighborCountRef.current = null
       neighborCountStringRef.current = ''
+      // Reset performance tracking refs
+      animationSkipped.current = false
+      positionVerifiedRef.current = false
+      textStableRef.current = false
+      textUpdateSkipped.current = false
       // Reset font ref to current store value
       fontRef.current = useStore.getState().debugTextFont
       // Hide text on reset
@@ -751,6 +820,7 @@ export function Pillar({ position, height, radius, allPillars, pillarMap, pillar
   // PERFORMANCE: Only run animation useFrame when actually animating
   // OPTIMIZATION: Use ref to track if we can skip this useFrame entirely
   const animationSkipped = useRef(false)
+  const positionVerifiedRef = useRef(false) // Track if we've verified position after reveal
   useFrame((state, delta) => {
     if (!meshRef.current) return
     
@@ -758,12 +828,26 @@ export function Pillar({ position, height, radius, allPillars, pillarMap, pillar
     if (!isFlipping && !isFalling && !wasRevealed && animationSkipped.current) {
       return
     }
+    
+    // PERFORMANCE: Once revealed and animations complete, verify position once then skip
+    if (!isFlipping && !isFalling && wasRevealed && animationSkipped.current) {
+      if (!positionVerifiedRef.current) {
+        // Verify position once after reveal completes
+        if (Math.abs(meshRef.current.position.y - position[1]) > 0.001) {
+          meshRef.current.position.y = position[1]
+        }
+        positionVerifiedRef.current = true
+      }
+      return
+    }
+    
     animationSkipped.current = (!isFlipping && !isFalling)
+    positionVerifiedRef.current = false // Reset when animations restart
     
     // Early return if no animations active
     if (!isFlipping && !isFalling) {
-      // Still ensure position is correct once
-      if (meshRef.current.position.y !== position[1]) {
+      // Ensure position is correct
+      if (Math.abs(meshRef.current.position.y - position[1]) > 0.001) {
         meshRef.current.position.y = position[1]
       }
       return
