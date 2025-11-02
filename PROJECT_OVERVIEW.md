@@ -36,9 +36,9 @@
 
 ## GitHub Links
 
-### Latest Commit (Debug Panel - Commit Hash Display)
+### Latest Commit (Stable Main - FPS Performance Fixes)
 - **Repository**: https://github.com/ozlphrt/HexaSweeper
-- **Commit**: `c9e51762d546826c6d7de1830a0eb76b3139c8f2`
-- **Tree URL**: https://github.com/ozlphrt/HexaSweeper/tree/c9e51762d546826c6d7de1830a0eb76b3139c8f2
-- **Commit URL**: https://github.com/ozlphrt/HexaSweeper/commit/c9e51762d546826c6d7de1830a0eb76b3139c8f2
+- **Commit**: `8bf06794549f439385a111a5cb3d12c92138aa92`
+- **Tree URL**: https://github.com/ozlphrt/HexaSweeper/tree/8bf06794549f439385a111a5cb3d12c92138aa92
+- **Commit URL**: https://github.com/ozlphrt/HexaSweeper/commit/8bf06794549f439385a111a5cb3d12c92138aa92
 - **Playable URL**: https://ozlphrt.github.io/HexaSweeper/
