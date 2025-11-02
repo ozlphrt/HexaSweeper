@@ -3,6 +3,9 @@ import * as dat from 'dat.gui'
 import { useStore } from './store'
 import { soundManager } from './SoundManager'
 
+// Git commit hash injected at build time (declared in vite-env.d.ts)
+const GIT_COMMIT_HASH = typeof __GIT_COMMIT_HASH__ !== 'undefined' ? __GIT_COMMIT_HASH__ : 'unknown'
+
 // Legacy clipboard fallback function
 const copyToClipboardLegacy = (text: string) => {
   const textArea = document.createElement('textarea')
@@ -102,6 +105,45 @@ export function DebugPanel() {
     guiElement.style.maxWidth = isMobile ? 'calc(100vw - 20px)' : '300px'
     guiElement.style.maxHeight = isMobile ? 'calc(100vh - 20px)' : 'auto'
     guiElement.style.overflowY = isMobile ? 'auto' : 'visible'
+
+    // Add commit hash display at the top of the panel
+    const versionInfo = { commit: GIT_COMMIT_HASH }
+    const versionControl = gui.add(versionInfo, 'commit').name('Version (Commit)').listen()
+    // Style the commit hash display
+    const versionLi = versionControl.domElement.closest('li')
+    if (versionLi) {
+      versionLi.style.cursor = 'pointer'
+      versionLi.style.userSelect = 'text'
+      versionLi.title = `Git commit: ${GIT_COMMIT_HASH}\nClick to copy`
+      
+      // Make it clickable to copy commit hash
+      versionLi.addEventListener('click', (e) => {
+        e.stopPropagation() // Prevent dat.gui from collapsing folders
+        const hashToCopy = GIT_COMMIT_HASH
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(hashToCopy).then(() => {
+            console.log(`Commit hash copied to clipboard: ${hashToCopy}`)
+            // Visual feedback
+            const originalText = versionLi.querySelector('.property-name')?.textContent
+            if (originalText) {
+              const nameEl = versionLi.querySelector('.property-name') as HTMLElement
+              const valueEl = versionLi.querySelector('.property-value') as HTMLElement
+              if (nameEl && valueEl) {
+                const originalValue = valueEl.textContent
+                valueEl.textContent = '✓ Copied!'
+                setTimeout(() => {
+                  if (valueEl) valueEl.textContent = originalValue
+                }, 1000)
+              }
+            }
+          }).catch(() => {
+            copyToClipboardLegacy(hashToCopy)
+          })
+        } else {
+          copyToClipboardLegacy(hashToCopy)
+        }
+      })
+    }
 
     // Camera Info (compact)
     const cameraFolder = gui.addFolder('Camera')
