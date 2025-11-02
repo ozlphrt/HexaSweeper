@@ -121,6 +121,11 @@ export function Scoreboard() {
         </button>
       </div>
 
+      {/* Mobile Instructions */}
+      <div className="mobile-instructions">
+        <div className="mobile-hint">Tap to reveal • Long-press to flag</div>
+      </div>
+
     </div>
   )
 }

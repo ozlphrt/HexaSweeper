@@ -1,6 +1,42 @@
-import React, { useEffect, useRef } from 'react'
-import { Pillar } from './Pillar'
+import React, { useEffect, useRef, useMemo } from 'react'
+import { MemoizedPillar } from './Pillar'
 import { useStore } from './store'
+import * as THREE from 'three'
+
+// Shared geometry for all pillars (performance optimization - single geometry instance)
+let sharedHexGeometry: THREE.CylinderGeometry | null = null
+
+function getSharedHexGeometry(radius: number): THREE.CylinderGeometry {
+  if (!sharedHexGeometry) {
+    const thickness = 0.15
+    sharedHexGeometry = new THREE.CylinderGeometry(radius, radius, thickness, 6, 1, false)
+    
+    // Add subtle chamfer to edges (only once)
+    const positionAttribute = sharedHexGeometry.getAttribute('position')
+    const positions = positionAttribute.array as Float32Array
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i]
+      const y = positions[i + 1]
+      const z = positions[i + 2]
+      
+      const distance = Math.sqrt(x * x + z * z)
+      
+      if (distance > radius * 0.7) {
+        const chamferAmount = 0.15
+        const normalizedX = x / distance
+        const normalizedZ = z / distance
+        
+        positions[i] = normalizedX * (radius - chamferAmount)
+        positions[i + 2] = normalizedZ * (radius - chamferAmount)
+      }
+    }
+    
+    positionAttribute.needsUpdate = true
+    sharedHexGeometry.computeVertexNormals()
+  }
+  return sharedHexGeometry
+}
 
 export function HexGrid() {
   const { pillarConfigs, initializeGame } = useStore()
@@ -9,6 +45,11 @@ export function HexGrid() {
   const spacingScale = 0.85
   const rows = 50  // 50x50 grid for better circular coverage
   const cols = 50
+  
+  // Create pillar map for O(1) neighbor lookups (performance optimization)
+  const pillarMap = useMemo(() => {
+    return new Map(pillarConfigs.map(p => [p.key, p]))
+  }, [pillarConfigs])
   
   // Hexagonal positioning function
   const hexPosition = (q: number, r: number) => {
@@ -84,13 +125,15 @@ export function HexGrid() {
   return (
     <>
       {pillarConfigs.map(({ key, pos, height }) => (
-        <Pillar
+        <MemoizedPillar
           key={key}
           position={pos}
           height={height}
           radius={radius}
           allPillars={pillarConfigs}
+          pillarMap={pillarMap}
           pillarKey={key}
+          sharedGeometry={getSharedHexGeometry(radius)}
         />
       ))}
     </>

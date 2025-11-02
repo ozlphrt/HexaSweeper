@@ -15,6 +15,9 @@ body {
   padding: 0;
   height: 100vh;
   width: 100vw;
+  touch-action: none; /* Prevent default touch gestures */
+  -webkit-touch-callout: none; /* Disable iOS callout */
+  -webkit-user-select: none; /* Disable text selection on iOS */
 }
 
 #root {
@@ -29,6 +32,7 @@ canvas {
   height: 100vh !important;
   display: block;
   background-color: #2c3e50 !important; /* Match Canvas background to prevent flicker */
+  touch-action: none; /* Prevent default touch behaviors (zoom, scroll) */
 }
 
 /* Scoreboard Styles */
@@ -44,6 +48,61 @@ canvas {
   padding: 10px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   min-width: 260px;
+}
+
+/* Mobile Instructions */
+.mobile-instructions {
+  display: none; /* Hidden on desktop */
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mobile-hint {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  font-weight: 500;
+}
+
+/* Mobile responsive scoreboard */
+@media (max-width: 768px) {
+  .scoreboard {
+    top: 10px;
+    left: 10px;
+    padding: 8px;
+    min-width: auto;
+    max-width: calc(100vw - 20px);
+  }
+  
+  .progress-container {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  
+  .progress-number {
+    font-size: 32px;
+  }
+  
+  .progress-label {
+    font-size: 10px;
+  }
+  
+  .scoreboard-controls {
+    flex-direction: row;
+    gap: 8px;
+  }
+  
+  .new-game-button,
+  .audio-toggle-button {
+    font-size: 14px;
+    padding: 8px 16px;
+    min-height: 44px; /* iOS recommended touch target */
+  }
+  
+  .mobile-instructions {
+    display: block; /* Show on mobile */
+  }
 }
 
 

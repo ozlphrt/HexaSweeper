@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { soundManager } from './SoundManager'
 
 // Helper function to get neighboring cells in hexagonal grid
-function getNeighbors(key: string, pillarConfigs: PillarConfig[]): string[] {
+// Optimized: Use Map for O(1) lookup instead of O(n) array.some()
+function getNeighbors(key: string, pillarMap: Map<string, PillarConfig>): string[] {
   // Extract coordinates from key (format: "p-q-r")
   const parts = key.split('-')
   if (parts.length !== 3) return []
@@ -18,7 +19,7 @@ function getNeighbors(key: string, pillarConfigs: PillarConfig[]): string[] {
   const neighbors: string[] = []
   neighborOffsets.forEach(([dq, dr]) => {
     const neighborKey = `p-${q + dq}-${r + dr}`
-    if (pillarConfigs.some(p => p.key === neighborKey)) {
+    if (pillarMap.has(neighborKey)) {
       neighbors.push(neighborKey)
     }
   })
@@ -27,7 +28,8 @@ function getNeighbors(key: string, pillarConfigs: PillarConfig[]): string[] {
 }
 
 // Helper function to generate logically solvable puzzles
-function generateSolvablePuzzle(pillarConfigs: PillarConfig[], targetMineCount: number) {
+// Optimized: Use Map for O(1) neighbor lookups
+function generateSolvablePuzzle(pillarConfigs: PillarConfig[], pillarMap: Map<string, PillarConfig>, targetMineCount: number) {
   const totalCells = pillarConfigs.length
   const maxMineCount = Math.min(targetMineCount, Math.floor(totalCells * 0.2)) // Max 20% mine density
   
@@ -40,8 +42,8 @@ function generateSolvablePuzzle(pillarConfigs: PillarConfig[], targetMineCount: 
       const randomIndex = Math.floor(Math.random() * totalCells)
       const candidateKey = pillarConfigs[randomIndex].key
       
-      // Avoid clustering mines too much
-      const neighbors = getNeighbors(candidateKey, pillarConfigs)
+      // Avoid clustering mines too much (optimized with Map)
+      const neighbors = getNeighbors(candidateKey, pillarMap)
       const neighborMineCount = neighbors.filter(neighborKey => 
         minePositions.has(neighborKey)
       ).length
@@ -70,7 +72,8 @@ function generateSolvablePuzzle(pillarConfigs: PillarConfig[], targetMineCount: 
 }
 
 // Test if a puzzle configuration is logically solvable
-function isPuzzleSolvable(pillarConfigs: PillarConfig[], minePositions: Set<string>) {
+// Optimized: Use Map for O(1) neighbor lookups
+function isPuzzleSolvable(pillarConfigs: PillarConfig[], pillarMap: Map<string, PillarConfig>, minePositions: Set<string>) {
   // Create a temporary cell states for testing
   const tempCellStates: Record<string, CellState> = {}
   
@@ -84,9 +87,9 @@ function isPuzzleSolvable(pillarConfigs: PillarConfig[], minePositions: Set<stri
     }
   })
   
-  // Calculate neighbor counts
+  // Calculate neighbor counts (optimized with Map)
   pillarConfigs.forEach(pillar => {
-    const neighbors = getNeighbors(pillar.key, pillarConfigs)
+    const neighbors = getNeighbors(pillar.key, pillarMap)
     const neighborMineCount = neighbors.filter(neighborKey => 
       tempCellStates[neighborKey]?.isMine
     ).length
@@ -104,6 +107,9 @@ function isPuzzleSolvable(pillarConfigs: PillarConfig[], minePositions: Set<stri
     changed = false
     iterations++
     
+    // Create pillar map once for O(1) lookups (optimization)
+    const pillarMap = new Map(pillarConfigs.map(p => [p.key, p]))
+    
     // Find cells that can be logically determined
     for (const pillar of pillarConfigs) {
       const key = pillar.key
@@ -111,7 +117,7 @@ function isPuzzleSolvable(pillarConfigs: PillarConfig[], minePositions: Set<stri
       
       if (cell.isRevealed || cell.isMine) continue
       
-      const neighbors = getNeighbors(key, pillarConfigs)
+      const neighbors = getNeighbors(key, pillarMap)
       const unrevealedNeighbors = neighbors.filter(neighborKey => 
         tempCellStates[neighborKey] && !tempCellStates[neighborKey].isRevealed && !flagged.has(neighborKey)
       )
@@ -247,6 +253,9 @@ export const useStore = create<GameState>((set, get) => ({
     console.log('Initializing game with', pillarConfigs.length, 'cells')
     console.log('First few cells:', pillarConfigs.slice(0, 5))
     
+    // Create Map for O(1) neighbor lookups (performance optimization)
+    const pillarMap = new Map(pillarConfigs.map(p => [p.key, p]))
+    
     // Initialize all cells
     pillarConfigs.forEach(pillar => {
       cellStates[pillar.key] = {
@@ -259,7 +268,7 @@ export const useStore = create<GameState>((set, get) => ({
     })
 
     // Generate a logically solvable puzzle
-    const { minePositions, actualMineCount } = generateSolvablePuzzle(pillarConfigs, mineCount)
+    const { minePositions, actualMineCount } = generateSolvablePuzzle(pillarConfigs, pillarMap, mineCount)
     
     console.log('Generated solvable puzzle with', actualMineCount, 'mines')
 
@@ -268,9 +277,9 @@ export const useStore = create<GameState>((set, get) => ({
       cellStates[key].isMine = true
     })
 
-    // Calculate neighbor mine counts
+    // Calculate neighbor mine counts (optimized with Map)
     pillarConfigs.forEach(pillar => {
-      const neighbors = getNeighbors(pillar.key, pillarConfigs)
+      const neighbors = getNeighbors(pillar.key, pillarMap)
       const neighborMineCount = neighbors.filter(neighborKey => 
         cellStates[neighborKey]?.isMine
       ).length
@@ -332,7 +341,8 @@ export const useStore = create<GameState>((set, get) => ({
 
     // If no neighboring mines, reveal neighbors
     if (cell.neighborMineCount === 0) {
-      const neighbors = getNeighbors(key, state.pillarConfigs)
+      const pillarMap = new Map(state.pillarConfigs.map(p => [p.key, p]))
+      const neighbors = getNeighbors(key, pillarMap)
       neighbors.forEach(neighborKey => {
         get().revealCell(neighborKey)
       })
@@ -431,13 +441,18 @@ export const useStore = create<GameState>((set, get) => ({
       return
     }
 
+    // Create deep copy of cellStates to avoid mutation issues
+    // CRITICAL: Must copy the cell object itself, not just the reference
+    // This prevents React from seeing multiple cells as "changed" when only one is updated
     const newCellStates = { ...cellStates }
+    newCellStates[key] = { ...cellStates[key] } // Deep copy the cell object
     const cell = newCellStates[key]
 
     if (cell.isMine) {
       const { immortalMode } = get()
       if (immortalMode) {
         // In immortal mode, just flag this mine and continue
+        // Cell is already deep copied above, so we can safely mutate it
         cell.isRevealed = true
         cell.isFlagged = true
         cell.isImmortalMine = true
@@ -445,8 +460,12 @@ export const useStore = create<GameState>((set, get) => ({
         return
       } else {
         // Game over - reveal all mines and store clicked mine position
-        Object.values(newCellStates).forEach(c => {
-          if (c.isMine) c.isRevealed = true
+        // Create deep copies for all mine cells to avoid mutation
+        Object.keys(newCellStates).forEach(cellKey => {
+          const c = newCellStates[cellKey]
+          if (c.isMine) {
+            newCellStates[cellKey] = { ...c, isRevealed: true }
+          }
         })
         // Find the clicked mine's position from pillarConfigs
         const clickedMinePillar = pillarConfigs.find(p => p.key === key)
@@ -470,16 +489,21 @@ export const useStore = create<GameState>((set, get) => ({
     cell.isRevealed = true
     cell.isFlagged = false
 
-    // If this cell has no neighboring mines, add neighbors to queue
+    // If this cell has no neighboring mines, add neighbors to queue ONE AT A TIME
+    // Add them to the FRONT of the queue so they process in order, creating a cascade
     if (cell.neighborMineCount === 0 && !cell.isMine) {
-      const neighbors = getNeighbors(key, pillarConfigs)
+      // Create pillar map for O(1) neighbor lookups (optimization)
+      const pillarMap = new Map(pillarConfigs.map(p => [p.key, p]))
+      const neighbors = getNeighbors(key, pillarMap)
       const newNeighbors = neighbors.filter(nKey => 
         newCellStates[nKey] && 
         !newCellStates[nKey].isRevealed && 
         !newCellStates[nKey].isFlagged &&
         !newQueue.includes(nKey)
       )
-      newQueue.push(...newNeighbors)
+      // Add neighbors to FRONT of queue (unshift) so they process before other queued items
+      // This creates a depth-first cascade effect
+      newQueue.unshift(...newNeighbors)
     }
 
     // Check for win condition

@@ -63,8 +63,8 @@ export default function Scene() {
         position={[-10, 15, -10]}
         intensity={sunlight}
         castShadow
-        shadow-mapSize-width={4096}
-        shadow-mapSize-height={4096}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-far={50}
         shadow-camera-left={-25}
         shadow-camera-right={25}

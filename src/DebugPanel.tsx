@@ -79,23 +79,29 @@ export function DebugPanel() {
       return
     }
     
+    // Detect mobile devices
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
+    
     // Create dat.gui instance with fixed positioning
     const gui = new dat.GUI({ 
-      width: 300,
+      width: isMobile ? 280 : 300,
       autoPlace: true,
-      closed: false  // Start open
+      closed: isMobile ? true : false  // Start closed on mobile
     })
     guiRef.current = gui
     
     // Ensure the panel is positioned correctly and doesn't move
     const guiElement = gui.domElement
     guiElement.style.position = 'fixed'
-    guiElement.style.top = '10px'
-    guiElement.style.right = '10px'
+    guiElement.style.top = isMobile ? '10px' : '10px'
+    guiElement.style.right = isMobile ? '10px' : '10px'
     guiElement.style.zIndex = '1000'
     guiElement.style.border = '1px solid #333'
     guiElement.style.borderRadius = '4px'
     guiElement.style.display = isVisible ? 'block' : 'none'
+    guiElement.style.maxWidth = isMobile ? 'calc(100vw - 20px)' : '300px'
+    guiElement.style.maxHeight = isMobile ? 'calc(100vh - 20px)' : 'auto'
+    guiElement.style.overflowY = isMobile ? 'auto' : 'visible'
 
     // Camera Info (compact)
     const cameraFolder = gui.addFolder('Camera')

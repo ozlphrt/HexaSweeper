@@ -3,7 +3,9 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 
 // Preload the printable numbers GLTF model
-useGLTF.preload('/printable_numbers/scene.gltf')
+// Use import.meta.env.BASE_URL to respect Vite's base path configuration
+const NUMBERS_MODEL_PATH = `${import.meta.env.BASE_URL}printable_numbers/scene.gltf`
+useGLTF.preload(NUMBERS_MODEL_PATH)
 
 interface DigitalNumberProps {
   number: number
@@ -13,7 +15,7 @@ interface DigitalNumberProps {
 }
 
 export function DigitalNumber({ number, position, scale = 1, rotation = [0, 0, 0] }: DigitalNumberProps) {
-  const { scene } = useGLTF('/printable_numbers/scene.gltf')
+  const { scene } = useGLTF(NUMBERS_MODEL_PATH)
   const groupRef = useRef<THREE.Group>(null)
   
   // Create a unique instance for this number

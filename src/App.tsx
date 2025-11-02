@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import Scene from './Scene'
@@ -357,12 +358,15 @@ function CameraInitializer() {
     }
   }, [debugCameraPosition])
 
+  // Detect mobile devices for better touch controls
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
+  
   return (
     <OrbitControls
       ref={controlsRef}
       enableZoom={true}
       enableDolly={true}
-      enablePan={true}
+      enablePan={!isMobile}  // Disable pan on mobile to reduce interference
       enableRotate={true}
       target={[0, 0, 0]}
       mouseButtons={{
@@ -372,13 +376,18 @@ function CameraInitializer() {
       }}
       touches={{
         ONE: 0,     // Rotate (drag)
-        TWO: 1      // Zoom/Dolly
+        TWO: 1      // Zoom/Dolly (pinch) - two finger zoom
       }}
-      // Smooth continuous zoom settings
-      zoomSpeed={1.0}
-      dollySpeed={1.0}
+      // Ensure two-finger zoom works properly
+      minDistance={0}
+      maxDistance={Infinity}
+      // Mobile-optimized settings
+      zoomSpeed={isMobile ? 0.8 : 1.0}
+      dollySpeed={isMobile ? 0.8 : 1.0}
+      rotateSpeed={isMobile ? 0.5 : 1.0}  // Slower rotation on mobile
+      panSpeed={isMobile ? 0.5 : 1.0}
       enableDamping={true}
-      dampingFactor={0.035}
+      dampingFactor={isMobile ? 0.05 : 0.035}  // More damping on mobile
       enableSmoothZoom={true}
       autoRotate={false}
       autoRotateSpeed={0}
@@ -394,24 +403,71 @@ function CameraInitializer() {
 
 
 export default function App() {
-  const { isRevealing, processRevealQueue, resetGame, audioEnabled } = useStore()
+  const { isRevealing, revealQueue, processRevealQueue, resetGame, audioEnabled } = useStore()
   
   // Sync audio state with sound manager
   useEffect(() => {
     soundManager.setAudioEnabled(audioEnabled)
   }, [audioEnabled])
 
-  // Process reveal queue with flooding animation
+  // Process reveal queue - one cell per frame, no artificial delay
+  // ROOT CAUSE FIX: React 18 batches state updates automatically. We must use flushSync
+  // to force immediate rendering between each cell reveal, preventing batch updates.
+  // CRITICAL: Also depend on revealQueue.length so effect restarts when new items are added
   useEffect(() => {
-    if (isRevealing) {
-      // Process cells with flooding effect - starts fast, then spreads outward
-      const interval = setInterval(() => {
-        processRevealQueue()
-      }, 40) // 40ms delay for better performance
+    if (isRevealing && revealQueue.length > 0) {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+      let rafId: number | null = null
+      let isProcessing = false
+      
+      const processQueue = () => {
+        // Prevent multiple simultaneous calls
+        if (isProcessing) {
+          return
+        }
+        
+        const state = useStore.getState()
+        
+        // Only process if queue has items and we're still revealing
+        if (!state.isRevealing || state.revealQueue.length === 0) {
+          return
+        }
+        
+        isProcessing = true
+        
+        // CRITICAL: Use flushSync to force React to render immediately after state update
+        // This prevents React 18 from batching multiple reveal updates together
+        flushSync(() => {
+          // Process exactly ONE cell
+          processRevealQueue()
+        })
+        
+        isProcessing = false
+        
+        // Check if we should continue processing
+        requestAnimationFrame(() => {
+          const nextState = useStore.getState()
+          if (nextState.isRevealing && nextState.revealQueue.length > 0) {
+            processQueue()
+          }
+        })
+      }
+      
+      // Start processing on next frame
+      timeoutId = setTimeout(() => {
+        rafId = requestAnimationFrame(processQueue)
+      }, 0)
 
-      return () => clearInterval(interval)
+      return () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId)
+        }
+      }
     }
-  }, [isRevealing, processRevealQueue])
+  }, [isRevealing, revealQueue.length, processRevealQueue])
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -470,11 +526,11 @@ export default function App() {
   return (
     <>
       <Canvas
-          shadows
-          dpr={[1, 2]}
-          camera={{ position: [8.7, 9.8, 24], fov: 45, near: 0.1, far: 200 }}
-          style={{ background: '#2c3e50' }}
-        >
+        shadows
+        dpr={typeof window !== 'undefined' && window.devicePixelRatio > 1 ? [1, Math.min(window.devicePixelRatio, 2)] : [1, 1]}
+        camera={{ position: [8.7, 9.8, 24], fov: 45, near: 0.1, far: 200 }}
+        style={{ background: '#2c3e50', touchAction: 'none' }}
+      >
         <color attach="background" args={['#2c3e50']} />
         <Scene />
         <CameraInitializer />
